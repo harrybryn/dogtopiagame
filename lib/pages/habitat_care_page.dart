@@ -43,10 +43,7 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
   }
 
   String _getInsideBackground() {
-    final hid = widget.habitat.habitatId.toLowerCase();
-    if (hid.contains('snow')) return 'assets/habitats/SnowHabitatInside.png';
-    if (hid.contains('beach')) return 'assets/habitats/BeachHabitatInside.png';
-    return 'assets/habitats/GardenHabitatInside.png';
+    return widget.habitat.insideAsset;
   }
 
   String _fmt(int n) {
@@ -337,51 +334,55 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
             ),
           ),
 
-          // ── TOP BAR CENTER: Enlarged Center Title Plaque (HabitatCare.png) ──
+          // ── TOP BAR CENTER: Center Title Plaque (HabitatCare.png) ──
           Positioned(
-            top: 8,
+            top: 2,
             left: 0,
             right: 0,
             child: Center(
               child: SizedBox(
-                width: 275,
-                height: 65,
+                width: 320,
+                height: 160,
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
                     Image.asset(
                       'assets/ui/HabitatCare.png',
-                      width: 275,
-                      height: 65,
+                      width: 320,
+                      height: 160,
                       fit: BoxFit.contain,
                       filterQuality: FilterQuality.high,
                     ),
                     Positioned(
-                      left: 78,
-                      right: 32,
-                      child: Text(
-                        widget.habitat.name,
-                        textAlign: TextAlign.center,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontFamily: 'Lilita One',
-                          fontSize: 16.5,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 0.5,
-                          shadows: [
-                            Shadow(
-                              color: Color(0xFF3B1404),
-                              offset: Offset(0, 1.5),
-                              blurRadius: 1,
-                            ),
-                            Shadow(
-                              color: Colors.black,
-                              offset: Offset(0, 2),
-                              blurRadius: 4,
-                            ),
-                          ],
+                      left: 104,
+                      right: 37,
+                      top: 0,
+                      bottom: 0,
+                      child: Center(
+                        child: Text(
+                          widget.habitat.name,
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontFamily: 'Lilita One',
+                            fontSize: 18.0,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 0.5,
+                            shadows: [
+                              Shadow(
+                                color: Color(0xFF3B1404),
+                                offset: Offset(0, 2),
+                                blurRadius: 2,
+                              ),
+                              Shadow(
+                                color: Colors.black,
+                                offset: Offset(0, 3),
+                                blurRadius: 6,
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -391,15 +392,18 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
             ),
           ),
 
-          // ── 3. Main Stage Content Area (Dragon City Side-by-Side) ──
+          // ── 3. Main Stage Content Area (Dragon City Side-by-Side, Centered & Balanced) ──
           Positioned(
-            top: 76,
-            bottom: 20,
-            left: 24,
-            right: 24,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
+            top: 86,
+            bottom: 18,
+            left: 36,
+            right: 72,
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1060),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
                 // ══════════════════════════════════════════
                 // LEFT COLUMN: Dog Character & Feed Station
                 // ══════════════════════════════════════════
@@ -809,10 +813,10 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
                 // ══════════════════════════════════════════
                 if (dog != null && info != null)
                   SizedBox(
-                    width: 390,
+                    width: 460,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 20, vertical: 18),
+                          horizontal: 26, vertical: 22),
                       decoration: BoxDecoration(
                         gradient: const RadialGradient(
                           center: Alignment(0, -0.4),
@@ -852,15 +856,15 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
                                           style: TextStyle(
                                             color: Color(0xFF78350F),
                                             fontFamily: 'Lilita One',
-                                            fontSize: 11,
+                                            fontSize: 13,
                                             fontWeight: FontWeight.w900,
                                             letterSpacing: 0.5,
                                           ),
                                         ),
-                                        const SizedBox(height: 5),
+                                        const SizedBox(height: 7),
                                         Container(
                                           padding: const EdgeInsets.symmetric(
-                                              horizontal: 10, vertical: 4),
+                                              horizontal: 12, vertical: 6),
                                           decoration: BoxDecoration(
                                             gradient: const LinearGradient(
                                               colors: [
@@ -878,14 +882,14 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
                                             mainAxisSize: MainAxisSize.min,
                                             children: [
                                               const Icon(Icons.star_rounded,
-                                                  color: Colors.white, size: 14),
+                                                  color: Colors.white, size: 16),
                                               const SizedBox(width: 4),
                                               Text(
                                                 dog.element.toUpperCase(),
                                                 style: const TextStyle(
                                                   color: Colors.white,
                                                   fontFamily: 'Lilita One',
-                                                  fontSize: 11,
+                                                  fontSize: 13,
                                                   fontWeight: FontWeight.w900,
                                                   letterSpacing: 0.4,
                                                 ),
@@ -908,12 +912,12 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
                                           style: TextStyle(
                                             color: Color(0xFF78350F),
                                             fontFamily: 'Lilita One',
-                                            fontSize: 11,
+                                            fontSize: 13,
                                             fontWeight: FontWeight.w900,
                                             letterSpacing: 0.5,
                                           ),
                                         ),
-                                        const SizedBox(height: 5),
+                                        const SizedBox(height: 7),
                                         Row(
                                           children: [
                                             Container(
@@ -954,7 +958,7 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
                                                 style: TextStyle(
                                                   color: Color(0xFF78350F),
                                                   fontFamily: 'Lilita One',
-                                                  fontSize: 10,
+                                                  fontSize: 12,
                                                   fontWeight: FontWeight.w900,
                                                 ),
                                               ),
@@ -986,7 +990,7 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
                                           style: TextStyle(
                                             color: Color(0xFF78350F),
                                             fontFamily: 'Lilita One',
-                                            fontSize: 11,
+                                            fontSize: 13,
                                             fontWeight: FontWeight.w900,
                                             letterSpacing: 0.5,
                                           ),
@@ -1006,7 +1010,7 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
                                               style: const TextStyle(
                                                 color: Color(0xFF3B1404),
                                                 fontFamily: 'Lilita One',
-                                                fontSize: 17,
+                                                fontSize: 20,
                                                 fontWeight: FontWeight.w900,
                                               ),
                                             ),
@@ -1027,7 +1031,7 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
                                           style: TextStyle(
                                             color: Color(0xFF78350F),
                                             fontFamily: 'Lilita One',
-                                            fontSize: 11,
+                                            fontSize: 13,
                                             fontWeight: FontWeight.w900,
                                             letterSpacing: 0.5,
                                           ),
@@ -1046,7 +1050,7 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
                                               style: const TextStyle(
                                                 color: Color(0xFF3B1404),
                                                 fontFamily: 'Lilita One',
-                                                fontSize: 17,
+                                                fontSize: 20,
                                                 fontWeight: FontWeight.w900,
                                               ),
                                             ),
@@ -1069,7 +1073,7 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
                                 style: TextStyle(
                                   color: Color(0xFF78350F),
                                   fontFamily: 'Lilita One',
-                                  fontSize: 11,
+                                  fontSize: 13,
                                   fontWeight: FontWeight.w900,
                                   letterSpacing: 0.5,
                                 ),
@@ -1091,7 +1095,7 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
                                   style: const TextStyle(
                                     color: Color(0xFF3B1404),
                                     fontFamily: 'Fredoka',
-                                    fontSize: 12.5,
+                                    fontSize: 14,
                                     fontWeight: FontWeight.w600,
                                     height: 1.35,
                                   ),
@@ -1153,7 +1157,7 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
                                       },
                                       child: Container(
                                         padding: const EdgeInsets.symmetric(
-                                            vertical: 10),
+                                            vertical: 12),
                                         decoration: BoxDecoration(
                                           gradient: const LinearGradient(
                                             colors: [
@@ -1178,14 +1182,14 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
                                               MainAxisAlignment.center,
                                           children: [
                                             Icon(Icons.open_with_rounded,
-                                                size: 15, color: Colors.white),
+                                                size: 17, color: Colors.white),
                                             SizedBox(width: 6),
                                             Text(
                                               'TRANSFER HABITAT',
                                               style: TextStyle(
                                                 color: Colors.white,
                                                 fontFamily: 'Lilita One',
-                                                fontSize: 11.5,
+                                                fontSize: 13,
                                                 fontWeight: FontWeight.w900,
                                                 letterSpacing: 0.5,
                                               ),
@@ -1204,7 +1208,7 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
                                       onTap: _showSellConfirmModal,
                                       child: Container(
                                         padding: const EdgeInsets.symmetric(
-                                            vertical: 10),
+                                            vertical: 12),
                                         decoration: BoxDecoration(
                                           gradient: const LinearGradient(
                                             colors: [
@@ -1231,8 +1235,8 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
                                           children: [
                                             Image.asset(
                                               'assets/ui/coins.png',
-                                              width: 16,
-                                              height: 16,
+                                              width: 18,
+                                              height: 18,
                                               fit: BoxFit.contain,
                                             ),
                                             const SizedBox(width: 6),
@@ -1241,7 +1245,7 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
                                               style: TextStyle(
                                                 color: Color(0xFF3B1404),
                                                 fontFamily: 'Lilita One',
-                                                fontSize: 11.5,
+                                                fontSize: 13,
                                                 fontWeight: FontWeight.w900,
                                                 letterSpacing: 0.5,
                                               ),
@@ -1260,6 +1264,8 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
               ],
             ),
           ),
+        ),
+      ),
 
           // ── 4. Toast Notification Overlay ──
           if (_toastMessage != null)

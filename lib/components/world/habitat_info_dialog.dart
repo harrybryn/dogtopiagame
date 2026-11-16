@@ -6,12 +6,12 @@ import '../common/hover_scale.dart';
 
 class HabitatInfoDialog extends StatelessWidget {
   final HabitatModel habitat;
-  final Function(HabitatModel) onOpenCare;
+  final Function(HabitatModel)? onOpenCare;
 
   const HabitatInfoDialog({
     super.key,
     required this.habitat,
-    required this.onOpenCare,
+    this.onOpenCare,
   });
 
   @override
@@ -169,52 +169,6 @@ class HabitatInfoDialog extends StatelessWidget {
                 }).toList(),
               ),
           ],
-          const Spacer(),
-
-          // Care Button at bottom
-          if (habitat.type == 'habitat')
-            Center(
-              child: HoverScale(
-                scale: 1.05,
-                onTap: () {
-                  Navigator.of(context).pop();
-                  onOpenCare(habitat);
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFFEC4899), Color(0xFFBE185D)],
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0x33000000),
-                        offset: Offset(0, 3),
-                        blurRadius: 6,
-                      ),
-                    ],
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.favorite, color: Colors.white, size: 18),
-                      SizedBox(width: 8),
-                      Text(
-                        'OPEN CARE SANCTUARY',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontFamily: 'Lilita One',
-                          fontSize: 14,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
         ],
       ),
     );

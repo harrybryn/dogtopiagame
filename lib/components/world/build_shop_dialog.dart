@@ -623,7 +623,7 @@ class _BuildShopDialogState extends State<BuildShopDialog> {
             final dog = dogs[index];
             final canAfford = widget.game.coins >= dog.costCoins &&
                 widget.game.crystals >= dog.costDiamonds;
-            final isUnlocked = widget.game.level >= dog.requiredLevel;
+            final isUnlocked = widget.game.level >= dog.requiredLevel && !dog.isLocked;
 
             // Check if player has an available compatible habitat with open slot (<4 dogs)
             final compatibleHabs = widget.game.placedHabitats
@@ -648,6 +648,10 @@ class _BuildShopDialogState extends State<BuildShopDialog> {
               requiredLevel: dog.requiredLevel,
               isUnlocked: isUnlocked,
               canAfford: canAfford,
+              onTapLocked: () {
+                _showToast(
+                    '🔒 ${dog.name} is locked! Reach Level ${dog.requiredLevel} to unlock.');
+              },
               onBuy: () {
                 if (compatibleHabs.isEmpty) {
                   final anyPlaced = widget.game.placedHabitats.any((h) =>
@@ -1300,6 +1304,7 @@ class _BuildShopDialogState extends State<BuildShopDialog> {
     required bool isUnlocked,
     required bool canAfford,
     required VoidCallback onBuy,
+    VoidCallback? onTapLocked,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -1341,15 +1346,43 @@ class _BuildShopDialogState extends State<BuildShopDialog> {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         child: Column(
           children: [
-            // Graphic Image with hover scale and drop shadow (solid black silhouette when locked)
+            // Graphic Image with subtle lock overlay when locked
             Expanded(
               child: Center(
-                child: Image.asset(
-                  image,
-                  color: isUnlocked ? null : Colors.black,
-                  colorBlendMode: isUnlocked ? null : BlendMode.srcIn,
-                  fit: BoxFit.contain,
-                  filterQuality: FilterQuality.high,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Opacity(
+                      opacity: isUnlocked ? 1.0 : 0.65,
+                      child: Image.asset(
+                        image,
+                        fit: BoxFit.contain,
+                        filterQuality: FilterQuality.high,
+                      ),
+                    ),
+                    if (!isUnlocked)
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: const Color(0xDD3B1404),
+                          border: Border.all(
+                              color: const Color(0xFFFBBF24), width: 2),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Color(0x66000000),
+                              blurRadius: 6,
+                              offset: Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: const Icon(
+                          Icons.lock_rounded,
+                          size: 18,
+                          color: Color(0xFFFBBF24),
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ),
@@ -1391,29 +1424,35 @@ class _BuildShopDialogState extends State<BuildShopDialog> {
 
             // Button or Level Lock
             if (!isUnlocked)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF786C5F),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: const Color(0xFF9CA3AF), width: 1.2),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.lock, size: 11, color: Colors.white),
-                    const SizedBox(width: 4),
-                    Text(
-                      'LVL $requiredLevel REQUIRED',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontFamily: 'Lilita One',
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 0.3,
+              HoverScale(
+                scale: 1.05,
+                onTap: onTapLocked,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF786C5F),
+                    borderRadius: BorderRadius.circular(10),
+                    border:
+                        Border.all(color: const Color(0xFF9CA3AF), width: 1.2),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.lock, size: 11, color: Colors.white),
+                      const SizedBox(width: 4),
+                      Text(
+                        'LVL $requiredLevel REQUIRED',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontFamily: 'Lilita One',
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.3,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               )
             else

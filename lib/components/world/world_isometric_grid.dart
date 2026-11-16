@@ -95,14 +95,17 @@ class WorldIsometricGrid extends StatefulWidget {
   final bool isSelectingHabitat;
   final Function(HabitatModel)? onSelectTargetHabitat;
 
-  // Obstacle & Locked Lot Extension properties
+  // Obstacle & Locked Lot Extension properties (2 Lots: Lot 1 = Upper [c >= 13, r < 12], Lot 2 = Lower [c >= 13, r >= 12])
   final List<ObstacleModel> obstacles;
   final String? selectedObstacleId;
   final bool isLotExpansionUnlocked;
+  final bool isLot1Unlocked;
+  final bool isLot2Unlocked;
   final Function(ObstacleModel)? onSelectObstacle;
   final Function(String obstacleId)? onStartClearingObstacle;
   final Function(String obstacleId)? onCompleteClearingObstacle;
   final VoidCallback? onUnlockLotExpansion;
+  final Function(int lotNumber)? onUnlockLot;
 
   const WorldIsometricGrid({
     super.key,
@@ -124,10 +127,13 @@ class WorldIsometricGrid extends StatefulWidget {
     this.obstacles = const [],
     this.selectedObstacleId,
     this.isLotExpansionUnlocked = false,
+    this.isLot1Unlocked = false,
+    this.isLot2Unlocked = false,
     this.onSelectObstacle,
     this.onStartClearingObstacle,
     this.onCompleteClearingObstacle,
     this.onUnlockLotExpansion,
+    this.onUnlockLot,
   });
 
   @override
@@ -191,12 +197,18 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
     }
   }
 
+  bool _isTileUnlocked(int c, int r) {
+    if (r >= 11) return true; // Entire bottom strip always unlocked
+    if (c < 13 && r < 11) return widget.isLot1Unlocked; // Expansion Lot 1 (Top-left / Bench)
+    return widget.isLot2Unlocked; // Expansion Lot 2 (Top-right, locked)
+  }
+
   bool _isFootprintValid(int col, int row, int w, int h) {
     for (int c = col; c < col + w; c++) {
       for (int r = row; r < row + h; r++) {
         if (!isTileBuildable(c, r)) return false;
         // Cannot place on locked lot expansion area
-        if (!widget.isLotExpansionUnlocked && c >= 14) return false;
+        if (!_isTileUnlocked(c, r)) return false;
 
         for (final hab in widget.habitats) {
           if (hab.id == widget.movingHabitatId) continue;
@@ -286,10 +298,13 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
           ),
 
           // ── Locked Lot Territory Translucent Overlay ──
-          if (!widget.isLotExpansionUnlocked)
+          if (!widget.isLot1Unlocked || !widget.isLot2Unlocked)
             Positioned.fill(
               child: CustomPaint(
-                painter: _LockedLotTerritoryPainter(),
+                painter: _LockedLotTerritoryPainter(
+                  isLot1Unlocked: widget.isLot1Unlocked,
+                  isLot2Unlocked: widget.isLot2Unlocked,
+                ),
               ),
             ),
 
@@ -304,7 +319,8 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
                   ghostH: itemH,
                   isGhostValid: canPlaceGhost,
                   isPlacing: isPlacing,
-                  isLotExpansionUnlocked: widget.isLotExpansionUnlocked,
+                  isLot1Unlocked: widget.isLot1Unlocked,
+                  isLot2Unlocked: widget.isLot2Unlocked,
                 ),
               ),
             ),
@@ -362,9 +378,19 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
             else if (entity is ObstacleModel)
               _buildObstacleWidget(entity, isPlacing),
 
-          // ── FOR SALE Wooden Sign on Locked Lot Territory (Dragon City style) ──
-          if (!widget.isLotExpansionUnlocked && !isPlacing)
-            _buildForSaleSign(),
+          // ── 2 FOR SALE Wooden Signs on Locked Expansion Lots ──
+          if (!widget.isLot1Unlocked && !isPlacing)
+            _buildForSaleSign(
+              lotNumber: 1,
+              col: 5,
+              row: 4,
+            ),
+          if (!widget.isLot2Unlocked && !isPlacing)
+            _buildForSaleSign(
+              lotNumber: 2,
+              col: 18,
+              row: 4,
+            ),
 
           // ── Ghost Building Preview during Placement / Move ──
           if (isPlacing) _buildGhostPreview(itemW, itemH, canPlaceGhost),
@@ -1059,7 +1085,8 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
         ? (1.0 - (remainingSeconds / max(1, obs.clearDuration))).clamp(0.0, 1.0)
         : 0.0;
 
-    final isLockedLot = !widget.isLotExpansionUnlocked && obs.col >= 14;
+    final isLockedLot = (obs.col < 13 && obs.row < 11 && !widget.isLot1Unlocked) ||
+        (obs.col >= 13 && obs.row < 11 && !widget.isLot2Unlocked); // Top-right only
 
     return Positioned(
       left: imgX,
@@ -1237,12 +1264,16 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
     );
   }
 
-  Widget _buildForSaleSign() {
-    final corners = getHabitatCorners(17, 9, 2, 2);
-    final imgW = 140.0;
-    final imgH = 150.0;
+  Widget _buildForSaleSign({
+    required int lotNumber,
+    required int col,
+    required int row,
+  }) {
+    final corners = getHabitatCorners(col, row, 2, 2);
+    const imgW = 135.0;
+    const imgH = 95.0;
     final imgX = corners.center.dx - imgW / 2;
-    final imgY = corners.center.dy - imgH * 0.85;
+    final imgY = corners.center.dy - imgH * 0.75;
 
     return Positioned(
       left: imgX,
@@ -1251,132 +1282,53 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
       height: imgH,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: widget.onUnlockLotExpansion,
-        child: AnimatedBuilder(
-          animation: _bounceController,
-          builder: (context, _) {
-            final bounceY = sin(_bounceController.value * 2 * pi) * 6;
-            return Stack(
-              alignment: Alignment.center,
-              clipBehavior: Clip.none,
-              children: [
-                // Ground shadow
-                Positioned(
-                  bottom: 12,
-                  child: Container(
-                    width: 70,
-                    height: 18,
-                    decoration: const BoxDecoration(
-                      borderRadius:
-                          BorderRadius.all(Radius.elliptical(70, 18)),
-                      gradient: RadialGradient(
-                        colors: [Color(0x99000000), Colors.transparent],
-                      ),
+        onTap: () {
+          if (widget.onUnlockLot != null) {
+            widget.onUnlockLot!(lotNumber);
+          } else {
+            widget.onUnlockLotExpansion?.call();
+          }
+        },
+        child: SizedBox(
+          width: imgW,
+          height: imgH,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              // Ground shadow
+              Positioned(
+                bottom: 4,
+                width: 75,
+                height: 18,
+                child: Container(
+                  decoration: const BoxDecoration(
+                    borderRadius:
+                        BorderRadius.all(Radius.elliptical(75, 18)),
+                    gradient: RadialGradient(
+                      colors: [Color(0x99000000), Colors.transparent],
                     ),
                   ),
                 ),
-
-                // Wooden Sign Post Graphic (Using BoneShapeSign asset)
-                Positioned(
-                  bottom: 14 + bounceY,
-                  child: Image.asset(
-                    'assets/buildings/BoneShapeSign.webp',
-                    width: 105,
-                    height: 95,
-                    fit: BoxFit.contain,
-                  ),
+              ),
+              // Lot For Sale Asset Graphic — static, no bounce
+              Positioned(
+                bottom: 8,
+                width: 135,
+                height: 95,
+                child: Image.asset(
+                  'assets/ui/LotForSale.png',
+                  width: 135,
+                  height: 95,
+                  fit: BoxFit.contain,
                 ),
-
-                // Floating "FOR SALE / Tap to Expand" Wooden Plaque
-                Positioned(
-                  top: 0 + bounceY,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 6),
-                    decoration: BoxDecoration(
-                      gradient: const RadialGradient(
-                        center: Alignment(0, -0.4),
-                        radius: 0.9,
-                        colors: [
-                          Color(0xFFFEF3C7),
-                          Color(0xFFFDE68A),
-                          Color(0xFFF59E0B),
-                        ],
-                      ),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                          color: const Color(0xFF78350F), width: 2.5),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Color(0x99000000),
-                          blurRadius: 10,
-                          offset: Offset(0, 5),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text(
-                          'FOR SALE',
-                          style: TextStyle(
-                            color: Color(0xFF451A03),
-                            fontFamily: 'Lilita One',
-                            fontSize: 14,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 0.6,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Image.asset(
-                              'assets/ui/coins.png',
-                              width: 14,
-                              height: 14,
-                            ),
-                            const SizedBox(width: 4),
-                            const Text(
-                              '2,500',
-                              style: TextStyle(
-                                color: Color(0xFF78350F),
-                                fontFamily: 'Lilita One',
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 2),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 1.5),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF10B981),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Text(
-                            'TAP TO EXPAND',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontFamily: 'Lilita One',
-                              fontSize: 8.5,
-                              letterSpacing: 0.3,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            );
-          },
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
+
 }
 
 class _GridPainter extends CustomPainter {
@@ -1386,7 +1338,8 @@ class _GridPainter extends CustomPainter {
   final int ghostH;
   final bool isGhostValid;
   final bool isPlacing;
-  final bool isLotExpansionUnlocked;
+  final bool isLot1Unlocked;
+  final bool isLot2Unlocked;
 
   _GridPainter({
     this.ghostCol,
@@ -1395,7 +1348,8 @@ class _GridPainter extends CustomPainter {
     this.ghostH = 3,
     this.isGhostValid = true,
     this.isPlacing = false,
-    this.isLotExpansionUnlocked = false,
+    this.isLot1Unlocked = false,
+    this.isLot2Unlocked = false,
   });
 
   @override
@@ -1438,9 +1392,10 @@ class _GridPainter extends CustomPainter {
           ..lineTo(pLeft.dx, pLeft.dy)
           ..close();
 
-        final paintToUse = (!isLotExpansionUnlocked && c >= 14)
-            ? lockedGridPaint
-            : gridLinePaint;
+        final isTileLocked =
+            (c < 13 && r < 11 && !isLot1Unlocked) ||
+            (c >= 13 && !isLot2Unlocked);
+        final paintToUse = isTileLocked ? lockedGridPaint : gridLinePaint;
         canvas.drawPath(tilePath, paintToUse);
       }
     }
@@ -1685,16 +1640,35 @@ class _TriangleArrowTipPainter extends CustomPainter {
 }
 
 class _LockedLotTerritoryPainter extends CustomPainter {
+  final bool isLot1Unlocked;
+  final bool isLot2Unlocked;
+
+  _LockedLotTerritoryPainter({
+    this.isLot1Unlocked = false,
+    this.isLot2Unlocked = false,
+  });
+
   @override
   void paint(Canvas canvas, Size size) {
-    // 1. Soft shaded mystery tint over locked tiles (col >= 14)
     final shadowPaint = Paint()
-      ..color = const Color(0x30000000)
+      ..color = const Color(0x44000000)
       ..style = PaintingStyle.fill;
 
-    for (int c = 14; c < gridCols; c++) {
+    final boundaryPaint = Paint()
+      ..color = const Color(0xCCFBBF24)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.8;
+
+    // 1. Shaded mystery tint over locked tiles
+    // Unlocked: r >= 11 (entire bottom strip). Lot 1 = c < 13 & r < 11, Lot 2 = c >= 13 & r < 11
+    for (int c = 0; c < gridCols; c++) {
       for (int r = 0; r < gridRows; r++) {
         if (!isTileBuildable(c, r)) continue;
+
+        final isLocked =
+            (c < 13 && r < 11 && !isLot1Unlocked) ||
+            (c >= 13 && r < 11 && !isLot2Unlocked); // Only top-right is Lot 2
+        if (!isLocked) continue;
 
         final cx = originX + (c - r) * (tileW / 2);
         final cy = originY + (c + r) * (tileH / 2);
@@ -1714,23 +1688,36 @@ class _LockedLotTerritoryPainter extends CustomPainter {
       }
     }
 
-    // 2. Clear golden dashed dividing boundary along col = 14
-    final boundaryPaint = Paint()
-      ..color = const Color(0x99FBBF24)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.5;
+    // 2. Full-width boundary line along row = 11 (separates unlocked bottom from locked top)
+    // Spans entire width (c = 0..gridCols) since r >= 11 is now all unlocked
+    if (!isLot1Unlocked || !isLot2Unlocked) {
+      for (int c = 0; c < gridCols; c++) {
+        if (isTileBuildable(c, 11)) {
+          final cx = originX + (c - 11) * (tileW / 2);
+          final cy = originY + (c + 11) * (tileH / 2);
+          final pTop = Offset(cx, cy - tileH / 2);
+          final pRight = Offset(cx + tileW / 2, cy);
+          canvas.drawLine(pTop, pRight, boundaryPaint);
+        }
+      }
+    }
 
-    for (int r = 0; r < gridRows; r++) {
-      if (isTileBuildable(14, r)) {
-        final cx = originX + (14 - r) * (tileW / 2);
-        final cy = originY + (14 + r) * (tileH / 2);
-        final pTop = Offset(cx, cy - tileH / 2);
-        final pLeft = Offset(cx - tileW / 2, cy);
-        canvas.drawLine(pTop, pLeft, boundaryPaint);
+    // 3. Dividing boundary line along col = 13, only for r < 11 (separates Lot 1 from Lot 2 in top region)
+    if (!isLot1Unlocked || !isLot2Unlocked) {
+      for (int r = 0; r < 11; r++) {
+        if (isTileBuildable(13, r)) {
+          final cx = originX + (13 - r) * (tileW / 2);
+          final cy = originY + (13 + r) * (tileH / 2);
+          final pTop = Offset(cx, cy - tileH / 2);
+          final pLeft = Offset(cx - tileW / 2, cy);
+          canvas.drawLine(pTop, pLeft, boundaryPaint);
+        }
       }
     }
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _LockedLotTerritoryPainter oldDelegate) =>
+      oldDelegate.isLot1Unlocked != isLot1Unlocked ||
+      oldDelegate.isLot2Unlocked != isLot2Unlocked;
 }

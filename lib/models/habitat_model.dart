@@ -21,6 +21,14 @@ class HabitatModel {
   bool underConstruction;
   int constructionDuration;
   int? constructionEndsAt;
+  String? bakingRecipeId;
+  String? bakingRecipeName;
+  int? bakingFoodAmount;
+  int? bakingXpReward;
+  int? bakingCostCoins;
+  int? bakingDurationSeconds;
+  int? bakingStartedAt;
+  int? bakingEndsAt;
 
   HabitatModel({
     required this.id,
@@ -43,9 +51,90 @@ class HabitatModel {
     this.underConstruction = false,
     this.constructionDuration = 0,
     this.constructionEndsAt,
+    this.bakingRecipeId,
+    this.bakingRecipeName,
+    this.bakingFoodAmount,
+    this.bakingXpReward,
+    this.bakingCostCoins,
+    this.bakingDurationSeconds,
+    this.bakingStartedAt,
+    this.bakingEndsAt,
   })  : dogs = dogs ?? [],
         lastCollectTime =
             lastCollectTime ?? DateTime.now().millisecondsSinceEpoch;
+
+  bool get isFactory =>
+      habitatId == 'dogfood-factory' ||
+      name.toLowerCase().contains('factory') ||
+      name.toLowerCase().contains('bakery');
+
+  bool get isBaking =>
+      isFactory && bakingEndsAt != null && !isBakingFinished;
+
+  bool get isBakingFinished {
+    if (!isFactory || bakingEndsAt == null) return false;
+    return DateTime.now().millisecondsSinceEpoch >= bakingEndsAt!;
+  }
+
+  int get bakingRemainingSeconds {
+    if (bakingEndsAt == null) return 0;
+    final diff = bakingEndsAt! - DateTime.now().millisecondsSinceEpoch;
+    return diff > 0 ? (diff / 1000).ceil() : 0;
+  }
+
+  double get bakingProgress {
+    if (bakingStartedAt == null || bakingEndsAt == null) return 0.0;
+    final total = bakingEndsAt! - bakingStartedAt!;
+    if (total <= 0) return 1.0;
+    final elapsed = DateTime.now().millisecondsSinceEpoch - bakingStartedAt!;
+    return (elapsed / total).clamp(0.0, 1.0);
+  }
+
+  String get insideAsset {
+    final hid = habitatId.toLowerCase();
+    final hname = name.toLowerCase();
+    if (hid.contains('factory') ||
+        hid.contains('bakery') ||
+        hname.contains('factory') ||
+        hname.contains('bakery')) {
+      return 'assets/itemsInShop/building/DogfoodFactoryInsideView.png';
+    }
+    if (hid.contains('oasis') ||
+        hid.contains('desert') ||
+        hname.contains('oasis') ||
+        hname.contains('desert')) {
+      return 'assets/habitats/OasisHabitatInside.png';
+    }
+    if (hid.contains('forest') ||
+        hid.contains('meadow') ||
+        hname.contains('forest') ||
+        hname.contains('meadow')) {
+      return 'assets/habitats/ForestHabitatInside.png';
+    }
+    if (hid.contains('snow') ||
+        hid.contains('peak') ||
+        hid.contains('frost') ||
+        hname.contains('snow') ||
+        hname.contains('peak') ||
+        hname.contains('frost')) {
+      return 'assets/habitats/SnowHabitatInside.png';
+    }
+    if (hid.contains('beach') ||
+        hid.contains('cove') ||
+        hname.contains('beach') ||
+        hname.contains('cove')) {
+      return 'assets/habitats/BeachHabitatInside.png';
+    }
+    if (hid.contains('legend') ||
+        hid.contains('realm') ||
+        hid.contains('astral') ||
+        hid.contains('celestial') ||
+        hname.contains('legend') ||
+        hname.contains('realm')) {
+      return 'assets/habitats/LegendaryHabitatInside.png';
+    }
+    return 'assets/habitats/GardenHabitatInside.png';
+  }
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -68,6 +157,14 @@ class HabitatModel {
         'underConstruction': underConstruction,
         'constructionDuration': constructionDuration,
         'constructionEndsAt': constructionEndsAt,
+        'bakingRecipeId': bakingRecipeId,
+        'bakingRecipeName': bakingRecipeName,
+        'bakingFoodAmount': bakingFoodAmount,
+        'bakingXpReward': bakingXpReward,
+        'bakingCostCoins': bakingCostCoins,
+        'bakingDurationSeconds': bakingDurationSeconds,
+        'bakingStartedAt': bakingStartedAt,
+        'bakingEndsAt': bakingEndsAt,
       };
 
   factory HabitatModel.fromJson(Map<String, dynamic> json) {
@@ -97,6 +194,33 @@ class HabitatModel {
       underConstruction: json['underConstruction'] as bool? ?? false,
       constructionDuration: json['constructionDuration'] as int? ?? 0,
       constructionEndsAt: json['constructionEndsAt'] as int?,
+      bakingRecipeId: json['bakingRecipeId'] as String?,
+      bakingRecipeName: json['bakingRecipeName'] as String?,
+      bakingFoodAmount: json['bakingFoodAmount'] as int?,
+      bakingXpReward: json['bakingXpReward'] as int?,
+      bakingCostCoins: json['bakingCostCoins'] as int?,
+      bakingDurationSeconds: json['bakingDurationSeconds'] as int?,
+      bakingStartedAt: json['bakingStartedAt'] as int?,
+      bakingEndsAt: json['bakingEndsAt'] as int?,
+    );
+  }
+
+  static HabitatModel createDefaultDogfoodFactory([int? now]) {
+    final time = now ?? DateTime.now().millisecondsSinceEpoch;
+    return HabitatModel(
+      id: 'hab_starter_factory',
+      type: 'facility',
+      habitatId: 'dogfood-factory',
+      name: 'Dogfood Factory',
+      col: 9,
+      row: 13,
+      sizeW: 3,
+      sizeH: 3,
+      maxDogfood: 50000,
+      dogfoodAccumulated: 0,
+      readyToCollectDogfood: false,
+      lastCollectTime: time,
+      underConstruction: false,
     );
   }
 
@@ -107,8 +231,8 @@ class HabitatModel {
       type: 'habitat',
       habitatId: 'garden-park',
       name: 'Garden Park',
-      col: 11,
-      row: 9,
+      col: 5,
+      row: 13,
       sizeW: 3,
       sizeH: 3,
       maxCoins: 1000,

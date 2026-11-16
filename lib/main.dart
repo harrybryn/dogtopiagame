@@ -3,6 +3,7 @@ import 'state/game_controller.dart';
 import 'components/common/loading_screen.dart';
 import 'pages/world_view_page.dart';
 import 'pages/habitat_care_page.dart';
+import 'pages/dog_factory_inside_page.dart';
 import 'pages/breeding_page.dart';
 import 'pages/collection_book_page.dart';
 import 'models/habitat_model.dart';
@@ -76,9 +77,26 @@ class _DogtopiaRootState extends State<DogtopiaRoot> {
         }
 
         switch (_currentRoute) {
+          case 'factory':
+            final habitat = _routeArgs['habitat'] as HabitatModel? ??
+                _game.placedHabitats.firstWhere((h) => h.isFactory,
+                    orElse: () => HabitatModel.createDefaultDogfoodFactory());
+            return DogFactoryInsidePage(
+              game: _game,
+              habitat: habitat,
+              onBackToWorld: () => _navigateTo('world'),
+            );
+
           case 'habitat':
             final habitat = _routeArgs['habitat'] as HabitatModel? ??
                 _game.placedHabitats.first;
+            if (habitat.isFactory) {
+              return DogFactoryInsidePage(
+                game: _game,
+                habitat: habitat,
+                onBackToWorld: () => _navigateTo('world'),
+              );
+            }
             return HabitatCarePage(
               game: _game,
               habitat: habitat,

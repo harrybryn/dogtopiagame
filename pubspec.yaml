@@ -68,6 +68,9 @@ flutter:
     - assets/itemsInShop/building/
     - assets/itemsInShop/dogs/
     - assets/itemsInShop/habitats/
+    - assets/TrioUIKit_FreeSample_v2.2/
+    - assets/TrioUIKit_FreeSample_v2.2/png/1x/icons/
+    - assets/TrioUIKit_FreeSample_v2.2/png/1x/cozy/
 
   # To add custom fonts to your application, add a fonts section here,
   # in this "flutter" section. Each entry in this list should have a

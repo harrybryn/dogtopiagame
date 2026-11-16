@@ -46,52 +46,59 @@ class DogStageInfo {
     required this.isEvolutionLevel,
   });
 
+  static String getBreedPrefix(String breedId) {
+    final b = breedId.toLowerCase();
+    if (b.contains('astral')) return 'Astral';
+    if (b.contains('beagle')) return 'Beagle';
+    if (b.contains('bulldog')) return 'Bulldog';
+    if (b.contains('chronos')) return 'Chronos';
+    if (b.contains('german') || b.contains('shepherd')) return 'German';
+    if (b.contains('golden')) return 'GoldenRetriever';
+    if (b.contains('husky')) return 'Husky';
+    if (b.contains('labrador')) return 'Labrador';
+    if (b.contains('pharaoh')) return 'Pharaoh';
+    if (b.contains('pug')) return 'Pug';
+    if (b.contains('shiba')) return 'Shiba';
+    if (b.contains('samoyed')) return 'WhiteSamoyed';
+    return 'Bulldog';
+  }
+
+  static String getBreedDisplayName(String breedId) {
+    final b = breedId.toLowerCase();
+    if (b.contains('astral')) return 'Astral Hound';
+    if (b.contains('beagle')) return 'Forest Beagle';
+    if (b.contains('bulldog')) return 'English Bulldog';
+    if (b.contains('chronos')) return 'Chronos Dog';
+    if (b.contains('german') || b.contains('shepherd')) return 'German Shepherd';
+    if (b.contains('golden')) return 'Golden Retriever';
+    if (b.contains('husky')) return 'Arctic Husky';
+    if (b.contains('labrador')) return 'Labrador Retriever';
+    if (b.contains('pharaoh')) return 'Pharaoh Hound';
+    if (b.contains('pug')) return 'Toy Pug';
+    if (b.contains('shiba')) return 'Japanese Shiba';
+    if (b.contains('samoyed')) return 'White Samoyed';
+    return 'English Bulldog';
+  }
+
   static DogStageInfo getInfo(DogModel dog) {
     final level = max(1, dog.level);
-    final breedId = dog.breedId.toLowerCase();
-    final isHusky = breedId.contains('husky');
+    final prefix = getBreedPrefix(dog.breedId);
+    final breedName = getBreedDisplayName(dog.breedId);
 
     String stage = 'Puppy';
     String stageLabel = 'Puppy';
-    String stageFullTitle = isHusky ? 'Husky Puppy' : 'Bulldog Puppy';
-
-    String sitImg = isHusky
-        ? 'assets/itemsInShop/dogs/HuskyPuppySit.png'
-        : 'assets/dogs/BulldogPuppySit.png';
-    String walkImg = isHusky
-        ? 'assets/itemsInShop/dogs/HuskyPuppyWalkingCycle.png'
-        : 'assets/dogs/BulldogPuppyWalkingCycle.png';
-    String portraitImg = isHusky
-        ? 'assets/itemsInShop/dogs/HuskyPuppySit.png'
-        : 'assets/dogs/BulldogPortrait.png';
-
     if (level >= 12) {
       stage = 'Adult';
       stageLabel = 'Adult';
-      stageFullTitle = isHusky ? 'Adult Arctic Husky' : 'Adult Dog Stage';
-      sitImg = isHusky
-          ? 'assets/itemsInShop/dogs/HuskyAdultSit.png'
-          : 'assets/dogs/BulldogAdultSit.png';
-      walkImg = isHusky
-          ? 'assets/itemsInShop/dogs/HuskyAdultWalkingCycle.png'
-          : 'assets/dogs/BulldogAdultWalkingCycle.png';
-      portraitImg = isHusky
-          ? 'assets/itemsInShop/dogs/HuskyAdultSit.png'
-          : 'assets/dogs/BulldogPortrait.png';
     } else if (level >= 4) {
       stage = 'Young';
       stageLabel = 'Young Pup';
-      stageFullTitle = isHusky ? 'Young Arctic Husky' : 'Young Pup Stage';
-      sitImg = isHusky
-          ? 'assets/itemsInShop/dogs/HuskyYoungSit.png'
-          : 'assets/dogs/BulldogYoungSit.png';
-      walkImg = isHusky
-          ? 'assets/itemsInShop/dogs/HuskyYoungWalkingCycle.png'
-          : 'assets/dogs/BulldogYoungWalkingCycle.png';
-      portraitImg = isHusky
-          ? 'assets/itemsInShop/dogs/HuskyYoungSit.png'
-          : 'assets/dogs/BulldogYoungPortrait.png';
     }
+
+    final stageFullTitle = '$stageLabel $breedName';
+    final sitImg = 'assets/itemsInShop/dogs/${prefix}${stage}Sit.png';
+    final walkImg = 'assets/itemsInShop/dogs/${prefix}${stage}WalkingCycle.png';
+    final portraitImg = sitImg;
 
     const feedRequired = 4;
     final feedProgress = dog.feedProgress;
@@ -103,12 +110,10 @@ class DogStageInfo {
     final xpBonusOnLevelUp = 60 + level * 65;
     final coinRatePerMin = 30 + level * 18;
 
-    final breedName = isHusky ? 'Arctic Husky' : 'English Bulldog';
-    final defaultName = isHusky ? 'Storm' : 'Winston';
-
-    final description = isHusky
-        ? 'Spirited, resilient, and famously athletic! The Arctic Husky thrives in snowy peaks and frosty trails, howling with joyful zest and racing with boundless agility.'
-        : 'Sturdy, courageous, and remarkably affectionate! Winston the English Bulldog thrives in sunny garden parks, greeting trainers with playful waddles and unwavering loyalty.';
+    final isHusky = prefix == 'Husky';
+    final defaultName = dog.name.isNotEmpty ? dog.name : breedName;
+    final description =
+        'A wonderful, devoted companion thriving in Dogtopia sanctuary.';
 
     final evolutionLore = level == 4
         ? 'Incredible! Your companion transformed into a swift and spirited Young Pup! Strength and coin output increased!'

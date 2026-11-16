@@ -321,14 +321,21 @@ class _WorldViewPageState extends State<WorldViewPage> {
                                 onCancelPlace: _cancelPlacement,
                                 onStartMove: _startMoving,
                                 obstacles: widget.game.obstacles,
-                                selectedObstacleId: widget.game.selectedObstacleId,
-                                isLotExpansionUnlocked: widget.game.isLotExpansionUnlocked,
+                                selectedObstacleId:
+                                    widget.game.selectedObstacleId,
+                                isLotExpansionUnlocked:
+                                    widget.game.isLotExpansionUnlocked,
+                                isLot1Unlocked: widget.game.isLot1Unlocked,
+                                isLot2Unlocked: widget.game.isLot2Unlocked,
                                 onSelectObstacle: _handleSelectObstacle,
                                 onStartClearingObstacle: (id) =>
                                     widget.game.startClearingObstacle(id),
                                 onCompleteClearingObstacle:
                                     _handleCompleteClearingObstacle,
-                                onUnlockLotExpansion: _showExpandLotDialog,
+                                onUnlockLotExpansion: () =>
+                                    _showExpandLotDialogForLot(
+                                        widget.game.isLot1Unlocked ? 2 : 1),
+                                onUnlockLot: _showExpandLotDialogForLot,
                               ),
                             ),
                           ),
@@ -396,10 +403,18 @@ class _WorldViewPageState extends State<WorldViewPage> {
                   onOpenBreeding: () => widget.onNavigate('breeding'),
                   onOpenCollection: () => widget.onNavigate('collection'),
                   onOpenHabitatCare: (hab) {
-                    widget.onNavigate('habitat', args: {'habitat': hab});
+                    if (hab.isFactory) {
+                      widget.onNavigate('factory', args: {'habitat': hab});
+                    } else {
+                      widget.onNavigate('habitat', args: {'habitat': hab});
+                    }
                   },
                   onStartMoveHabitat: (hab) => _startMoving(hab),
                   onOpenHabitatInfo: (hab) {
+                    if (hab.isFactory) {
+                      widget.onNavigate('factory', args: {'habitat': hab});
+                      return;
+                    }
                     showDialog(
                       context: context,
                       builder: (_) => HabitatInfoDialog(
@@ -594,7 +609,7 @@ class _WorldViewPageState extends State<WorldViewPage> {
   // ── Obstacle & Island Expansion Handlers ──
 
   void _handleSelectObstacle(ObstacleModel obs) {
-    if (!widget.game.isLotExpansionUnlocked && obs.col >= 14) {
+    if (obs.col < 13 && obs.row < 11 && !widget.game.isLot1Unlocked) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Row(
@@ -603,7 +618,33 @@ class _WorldViewPageState extends State<WorldViewPage> {
               SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Unlock the Eastern Expansion Lot first to clear this obstacle!',
+                  'Unlock Expansion Lot 1 first to clear this obstacle!',
+                  style: TextStyle(
+                    fontFamily: 'Fredoka',
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: Color(0xFF1E293B),
+          behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    if (obs.col >= 13 && obs.row < 11 && !widget.game.isLot2Unlocked) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.lock_rounded, color: Colors.amber, size: 20),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Unlock Expansion Lot 2 first to clear this obstacle!',
                   style: TextStyle(
                     fontFamily: 'Fredoka',
                     fontWeight: FontWeight.bold,
@@ -665,8 +706,17 @@ class _WorldViewPageState extends State<WorldViewPage> {
   }
 
   void _showExpandLotDialog() {
-    const cost = 2500;
+    _showExpandLotDialogForLot(widget.game.isLot1Unlocked ? 2 : 1);
+  }
+
+  void _showExpandLotDialogForLot(int lotNumber) {
+    final cost = 2500;
+    final xpReward = 120;
     final canAfford = widget.game.coins >= cost;
+    final lotTitle = lotNumber == 1 ? 'EXPANSION LOT 1 (PARK BENCH)' : 'EXPANSION LOT 2 (MEADOW)';
+    final lotSubtitle = lotNumber == 1
+        ? 'Unlock the upper park lot under the oak tree and bench! Obstacles will remain on the lot for you to clear for XP and coins.'
+        : 'Unlock the large east meadow expansion territory! Obstacles will remain on the lot for you to clear for XP and coins.';
 
     showDialog(
       context: context,
@@ -702,15 +752,15 @@ class _WorldViewPageState extends State<WorldViewPage> {
                 child: Column(
                   children: [
                     Image.asset(
-                      'assets/buildings/BoneShapeSign.webp',
-                      width: 90,
-                      height: 70,
+                      'assets/ui/LotForSale.png',
+                      width: 120,
+                      height: 80,
                       fit: BoxFit.contain,
                     ),
                     const SizedBox(height: 6),
-                    const Text(
-                      'EASTERN TERRITORY',
-                      style: TextStyle(
+                    Text(
+                      lotTitle,
+                      style: const TextStyle(
                         fontFamily: 'Lilita One',
                         fontSize: 18,
                         color: Color(0xFF78350F),
@@ -718,12 +768,12 @@ class _WorldViewPageState extends State<WorldViewPage> {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: Text(
-                        'Expand your floating island paradise! Unlock 12 more columns of buildable land to accommodate more dog sanctuaries and care facilities.',
+                        lotSubtitle,
                         textAlign: TextAlign.center,
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontFamily: 'Fredoka',
                           fontSize: 12,
                           color: Color(0xFF92400E),
@@ -744,19 +794,19 @@ class _WorldViewPageState extends State<WorldViewPage> {
                   _buildExpandPerkBadge(
                     icon: Icons.open_with_rounded,
                     label: 'New Space',
-                    sub: '+12 Columns',
+                    sub: '+6 Columns',
                     color: const Color(0xFF3B82F6),
                   ),
                   _buildExpandPerkBadge(
                     icon: Icons.star_rounded,
                     label: 'XP Reward',
-                    sub: '+120 XP',
+                    sub: '+$xpReward XP',
                     color: const Color(0xFF10B981),
                   ),
                   _buildExpandPerkBadge(
                     icon: Icons.pets_rounded,
                     label: 'Habitats',
-                    sub: 'More Dogs!',
+                    sub: lotNumber == 1 ? '+1/4 Island' : 'Full Island!',
                     color: const Color(0xFFEC4899),
                   ),
                 ],
@@ -783,20 +833,24 @@ class _WorldViewPageState extends State<WorldViewPage> {
                       );
                       return;
                     }
-                    final ok = widget.game.unlockLotExpansion();
+                    final ok = lotNumber == 1
+                        ? widget.game.unlockLot1()
+                        : widget.game.unlockLot2();
                     Navigator.of(ctx).pop();
                     if (ok) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
+                        SnackBar(
                           content: Row(
                             children: [
-                              Icon(Icons.celebration_rounded,
+                              const Icon(Icons.celebration_rounded,
                                   color: Colors.amber, size: 24),
-                              SizedBox(width: 8),
+                              const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
-                                  '🎉 Eastern territory unlocked! You can now place habitats here!',
-                                  style: TextStyle(
+                                  lotNumber == 1
+                                      ? '🎉 Expansion Lot 1 unlocked! The remaining 1/4 lot is still locked.'
+                                      : '🎉 Expansion Lot 2 unlocked! The entire island paradise is now unlocked!',
+                                  style: const TextStyle(
                                     fontFamily: 'Fredoka',
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -804,9 +858,9 @@ class _WorldViewPageState extends State<WorldViewPage> {
                               ),
                             ],
                           ),
-                          backgroundColor: Color(0xFF0F172A),
+                          backgroundColor: const Color(0xFF0F172A),
                           behavior: SnackBarBehavior.floating,
-                          duration: Duration(seconds: 3),
+                          duration: const Duration(seconds: 3),
                         ),
                       );
                     }
@@ -846,8 +900,8 @@ class _WorldViewPageState extends State<WorldViewPage> {
                         const SizedBox(width: 8),
                         Text(
                           canAfford
-                              ? 'UNLOCK LOT (🪙 2,500)'
-                              : 'NEED 🪙 2,500 (Have: ${widget.game.coins})',
+                              ? 'UNLOCK LOT $lotNumber (🪙 ${cost.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')})'
+                              : 'NEED 🪙 ${cost.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')} (Have: ${widget.game.coins})',
                           style: const TextStyle(
                             fontFamily: 'Lilita One',
                             fontSize: 16,

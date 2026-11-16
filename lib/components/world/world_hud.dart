@@ -4,6 +4,7 @@ import '../../models/habitat_model.dart';
 import '../../models/dog_model.dart';
 import '../../models/dog_evolution.dart';
 import '../common/hover_scale.dart';
+import '../../pages/dog_factory_inside_page.dart';
 
 class WorldHUD extends StatelessWidget {
   final GameController game;
@@ -331,7 +332,7 @@ class WorldHUD extends StatelessWidget {
             left: 0,
             right: 0,
             child: Center(
-              child: _buildHabitatActionBar(selectedHab),
+              child: _buildHabitatActionBar(context, selectedHab),
             ),
           ),
       ],
@@ -537,10 +538,26 @@ class WorldHUD extends StatelessWidget {
         );
   }
 
-  Widget _buildHabitatActionBar(HabitatModel hab) {
-    final isFactory = hab.habitatId == 'dogfood-factory' ||
-        hab.name.toLowerCase().contains('factory') ||
-        hab.name.toLowerCase().contains('bakery');
+  String _formatDuration(int totalSeconds) {
+    if (totalSeconds <= 0) return '00:00';
+    final hours = totalSeconds ~/ 3600;
+    final minutes = (totalSeconds % 3600) ~/ 60;
+    final seconds = totalSeconds % 60;
+    if (hours > 0) {
+      return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+    }
+    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
+
+  Widget _buildHabitatActionBar(BuildContext context, HabitatModel hab) {
+    final isFactory = hab.isFactory;
+    final isBaking = hab.isBaking;
+    final isReadyToCollectFood = isFactory &&
+        hab.readyToCollectDogfood &&
+        (hab.dogfoodAccumulated > 0 || (hab.bakingFoodAmount ?? 0) > 0);
+    final foodReadyAmount = hab.dogfoodAccumulated > 0
+        ? hab.dogfoodAccumulated
+        : (hab.bakingFoodAmount ?? 0);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -730,14 +747,25 @@ class WorldHUD extends StatelessWidget {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // COLLECT Button
+                        // MAKE FOOD (factory) or COLLECT (habitat) Button
                         HoverScale(
                           scale: 1.08,
                           onTap: () {
                             if (isFactory) {
-                              if (hab.dogfoodAccumulated > 0) {
-                                game.collectDogfood(hab.id);
-                              }
+                              // Open the DogFoodFactory inside page as a full-screen dialog
+                              showDialog(
+                                context: context,
+                                barrierDismissible: false,
+                                barrierColor: Colors.black87,
+                                builder: (ctx) => Dialog.fullscreen(
+                                  backgroundColor: Colors.transparent,
+                                  child: DogFactoryInsidePage(
+                                    game: game,
+                                    habitat: hab,
+                                    onBackToWorld: () => Navigator.of(ctx).pop(),
+                                  ),
+                                ),
+                              );
                             } else {
                               if (hab.coinsAccumulated > 0) {
                                 game.collectCoins(hab.id);
@@ -755,17 +783,18 @@ class WorldHUD extends StatelessWidget {
                                     width: 48,
                                     height: 48,
                                     decoration: BoxDecoration(
-                                      gradient: const LinearGradient(
+                                      gradient: LinearGradient(
                                         begin: Alignment.topCenter,
                                         end: Alignment.bottomCenter,
-                                        colors: [
-                                          Color(0xFFFBBF24),
-                                          Color(0xFFD97706)
-                                        ],
+                                        colors: isFactory
+                                            ? const [Color(0xFF10B981), Color(0xFF047857)]
+                                            : const [Color(0xFFFBBF24), Color(0xFFD97706)],
                                       ),
                                       borderRadius: BorderRadius.circular(16),
                                       border: Border.all(
-                                          color: const Color(0xFFFEF3C7),
+                                          color: isFactory
+                                              ? const Color(0xFFA7F3D0)
+                                              : const Color(0xFFFEF3C7),
                                           width: 1.5),
                                       boxShadow: const [
                                         BoxShadow(
@@ -776,61 +805,63 @@ class WorldHUD extends StatelessWidget {
                                       ],
                                     ),
                                     alignment: Alignment.center,
-                                    child: Image.asset(
-                                      isFactory
-                                          ? 'assets/ui/dogfood.png'
-                                          : 'assets/ui/coins.png',
-                                      width: 28,
-                                      height: 28,
-                                      fit: BoxFit.contain,
-                                      filterQuality: FilterQuality.high,
-                                    ),
-                                  ),
-                                  Positioned(
-                                    top: -9,
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 7, vertical: 1.5),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFFBBF24),
-                                        borderRadius:
-                                            BorderRadius.circular(10),
-                                        border: Border.all(
-                                            color: const Color(0xFFFEF3C7),
-                                            width: 1.2),
-                                        boxShadow: const [
-                                          BoxShadow(
-                                            color: Color(0x55000000),
-                                            blurRadius: 4,
-                                            offset: Offset(0, 2),
+                                    child: isFactory
+                                        ? const Icon(Icons.outdoor_grill_rounded,
+                                            color: Colors.white, size: 26)
+                                        : Image.asset(
+                                            'assets/ui/coins.png',
+                                            width: 28,
+                                            height: 28,
+                                            fit: BoxFit.contain,
+                                            filterQuality: FilterQuality.high,
                                           ),
-                                        ],
-                                      ),
-                                      child: Text(
-                                        _formatNumber(isFactory
-                                            ? hab.dogfoodAccumulated
-                                            : (hab.coinsAccumulated > 0
-                                                ? hab.coinsAccumulated
-                                                : 1000)),
-                                        style: const TextStyle(
-                                          fontFamily: 'Lilita One',
-                                          fontSize: 10,
-                                          color: Color(0xFF3B1404),
-                                          fontWeight: FontWeight.w900,
-                                          height: 1.0,
+                                  ),
+                                  if (!isFactory)
+                                    Positioned(
+                                      top: -9,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 7, vertical: 1.5),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFFBBF24),
+                                          borderRadius:
+                                              BorderRadius.circular(10),
+                                          border: Border.all(
+                                              color: const Color(0xFFFEF3C7),
+                                              width: 1.2),
+                                          boxShadow: const [
+                                            BoxShadow(
+                                              color: Color(0x55000000),
+                                              blurRadius: 4,
+                                              offset: Offset(0, 2),
+                                            ),
+                                          ],
+                                        ),
+                                        child: Text(
+                                          _formatNumber(hab.coinsAccumulated > 0
+                                              ? hab.coinsAccumulated
+                                              : 1000),
+                                          style: const TextStyle(
+                                            fontFamily: 'Lilita One',
+                                            fontSize: 10,
+                                            color: Color(0xFF3B1404),
+                                            fontWeight: FontWeight.w900,
+                                            height: 1.0,
+                                          ),
                                         ),
                                       ),
                                     ),
-                                  ),
                                 ],
                               ),
                               const SizedBox(height: 4),
-                              const Text(
-                                'COLLECT',
+                              Text(
+                                isFactory ? 'MAKE FOOD' : 'COLLECT',
                                 style: TextStyle(
                                   fontFamily: 'Lilita One',
                                   fontSize: 10,
-                                  color: Color(0xFFFEF08A),
+                                  color: isFactory
+                                      ? const Color(0xFF6EE7B7)
+                                      : const Color(0xFFFEF08A),
                                   letterSpacing: 0.5,
                                 ),
                               ),

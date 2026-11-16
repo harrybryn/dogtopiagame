@@ -7,6 +7,7 @@ import '../models/task_model.dart';
 import '../models/habitat_catalog.dart';
 import '../models/dog_evolution.dart';
 import '../models/obstacle_model.dart';
+import '../models/food_recipe_model.dart';
 
 class GameController extends ChangeNotifier {
   // Currencies
@@ -27,6 +28,7 @@ class GameController extends ChangeNotifier {
   // World objects
   List<HabitatModel> _placedHabitats = [
     HabitatModel.createDefaultGardenPark(),
+    HabitatModel.createDefaultDogfoodFactory(),
   ];
 
   // Active tasks
@@ -35,8 +37,9 @@ class GameController extends ChangeNotifier {
   // Selected habitat for HUD interaction
   String? _selectedHabitatId;
 
-  // Lot expansion state (false = Eastern half is locked with FOR SALE sign)
-  bool _isLotExpansionUnlocked = false;
+  // Lot expansion state (2 Lots for sale: Lot 1 = Top/Bench [c < 13, r < 11], Lot 2 = Right [c >= 13])
+  bool _isLot1Unlocked = false;
+  bool _isLot2Unlocked = false;
 
   // Obstacles scattered across the island (clearable with gold)
   List<ObstacleModel> _obstacles = ObstacleModel.defaultObstacles();
@@ -61,9 +64,17 @@ class GameController extends ChangeNotifier {
   List<HabitatModel> get placedHabitats => _placedHabitats;
   List<TaskModel> get tasks => _tasks;
   String? get selectedHabitatId => _selectedHabitatId;
-  bool get isLotExpansionUnlocked => _isLotExpansionUnlocked;
+  bool get isLot1Unlocked => _isLot1Unlocked;
+  bool get isLot2Unlocked => _isLot2Unlocked;
+  bool get isLotExpansionUnlocked => _isLot1Unlocked && _isLot2Unlocked;
   List<ObstacleModel> get obstacles => _obstacles;
   String? get selectedObstacleId => _selectedObstacleId;
+
+  bool isTileUnlocked(int col, int row) {
+    if (row >= 11) return true; // Entire bottom strip always unlocked (starter + south expansion)
+    if (col < 13 && row < 11) return _isLot1Unlocked; // Expansion Lot 1 (Top-left / Bench)
+    return _isLot2Unlocked; // Expansion Lot 2 (Top-right, locked)
+  }
 
   ObstacleModel? get selectedObstacle {
     if (_selectedObstacleId == null) return null;
@@ -82,16 +93,36 @@ class GameController extends ChangeNotifier {
     notifyListeners();
   }
 
-  bool unlockLotExpansion() {
-    if (_isLotExpansionUnlocked) return false;
+  bool unlockLot1() {
+    if (_isLot1Unlocked) return false;
     const cost = 2500;
     if (_coins < cost) return false;
 
     _coins -= cost;
-    _isLotExpansionUnlocked = true;
+    _isLot1Unlocked = true;
     _addXp(120);
+    // Note: Obstacles are NOT removed on lot unlock; player clears them manually
     notifyListeners();
     return true;
+  }
+
+  bool unlockLot2() {
+    if (_isLot2Unlocked) return false;
+    const cost = 2500;
+    if (_coins < cost) return false;
+
+    _coins -= cost;
+    _isLot2Unlocked = true;
+    _addXp(120);
+    // Note: Obstacles are NOT removed on lot unlock; player clears them manually
+    notifyListeners();
+    return true;
+  }
+
+  bool unlockLotExpansion() {
+    if (!_isLot1Unlocked) return unlockLot1();
+    if (!_isLot2Unlocked) return unlockLot2();
+    return false;
   }
 
   bool startClearingObstacle(String obstacleId) {
@@ -186,17 +217,17 @@ class GameController extends ChangeNotifier {
 
   void tickIncome() {
     bool changed = false;
+    final now = DateTime.now().millisecondsSinceEpoch;
 
     for (final h in _placedHabitats) {
-      if (h.habitatId == 'dogfood-factory') {
-        final maxFood = h.maxDogfood > 0 ? h.maxDogfood : 300;
-        if (h.dogfoodAccumulated < maxFood) {
-          final add = min(maxFood - h.dogfoodAccumulated, 25);
-          h.dogfoodAccumulated += add;
-          if (h.dogfoodAccumulated >= 25) {
+      if (h.isFactory) {
+        // Dragon City Farm logic: Check if active baking finished
+        if (h.bakingEndsAt != null && !h.readyToCollectDogfood) {
+          if (now >= h.bakingEndsAt!) {
+            h.dogfoodAccumulated = h.bakingFoodAmount ?? 0;
             h.readyToCollectDogfood = true;
+            changed = true;
           }
-          changed = true;
         }
       } else if (h.type == 'habitat' && h.maxCoins > 0) {
         if (h.dogs.isNotEmpty && h.coinsAccumulated < h.maxCoins) {
@@ -217,6 +248,48 @@ class GameController extends ChangeNotifier {
     }
   }
 
+  bool startBakingFood(String habitatId, FoodRecipeModel recipe) {
+    final h = _placedHabitats.firstWhere((it) => it.id == habitatId,
+        orElse: () => HabitatModel(id: '', habitatId: '', name: '', col: 0, row: 0));
+    if (h.id.isEmpty || !h.isFactory) return false;
+    if (_coins < recipe.costCoins) return false;
+    if (h.isBaking || (h.readyToCollectDogfood && h.dogfoodAccumulated > 0)) return false;
+
+    _coins -= recipe.costCoins;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    h.bakingRecipeId = recipe.id;
+    h.bakingRecipeName = recipe.name;
+    h.bakingFoodAmount = recipe.foodAmount;
+    h.bakingXpReward = recipe.xpReward;
+    h.bakingCostCoins = recipe.costCoins;
+    h.bakingDurationSeconds = recipe.durationSeconds;
+    h.bakingStartedAt = now;
+    h.bakingEndsAt = now + recipe.durationSeconds * 1000;
+    h.readyToCollectDogfood = false;
+    h.dogfoodAccumulated = 0;
+
+    notifyListeners();
+    return true;
+  }
+
+  bool speedUpBaking(String habitatId) {
+    final h = _placedHabitats.firstWhere((it) => it.id == habitatId,
+        orElse: () => HabitatModel(id: '', habitatId: '', name: '', col: 0, row: 0));
+    if (h.id.isEmpty || !h.isBaking) return false;
+
+    final remainingSecs = h.bakingRemainingSeconds;
+    final crystalsNeeded = max(1, (remainingSecs / 900).ceil());
+    if (_crystals < crystalsNeeded) return false;
+
+    _crystals -= crystalsNeeded;
+    h.bakingEndsAt = DateTime.now().millisecondsSinceEpoch;
+    h.dogfoodAccumulated = h.bakingFoodAmount ?? 0;
+    h.readyToCollectDogfood = true;
+
+    notifyListeners();
+    return true;
+  }
+
   bool collectCoins(String habitatId) {
     final h = _placedHabitats.firstWhere((it) => it.id == habitatId,
         orElse: () => HabitatModel(id: '', habitatId: '', name: '', col: 0, row: 0));
@@ -233,11 +306,28 @@ class GameController extends ChangeNotifier {
   bool collectDogfood(String habitatId) {
     final h = _placedHabitats.firstWhere((it) => it.id == habitatId,
         orElse: () => HabitatModel(id: '', habitatId: '', name: '', col: 0, row: 0));
-    if (h.id.isEmpty || h.dogfoodAccumulated <= 0) return false;
+    if (h.id.isEmpty) return false;
 
-    _kibble += h.dogfoodAccumulated;
+    final amountToCollect = h.dogfoodAccumulated > 0
+        ? h.dogfoodAccumulated
+        : (h.isBakingFinished ? (h.bakingFoodAmount ?? 0) : 0);
+    if (amountToCollect <= 0) return false;
+
+    _kibble += amountToCollect;
+    if (h.bakingXpReward != null && h.bakingXpReward! > 0) {
+      _addXp(h.bakingXpReward!);
+    }
     h.dogfoodAccumulated = 0;
     h.readyToCollectDogfood = false;
+    h.bakingRecipeId = null;
+    h.bakingRecipeName = null;
+    h.bakingFoodAmount = null;
+    h.bakingXpReward = null;
+    h.bakingCostCoins = null;
+    h.bakingDurationSeconds = null;
+    h.bakingStartedAt = null;
+    h.bakingEndsAt = null;
+
     notifyListeners();
     return true;
   }

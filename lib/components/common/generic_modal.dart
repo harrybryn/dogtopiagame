@@ -13,17 +13,22 @@ class GenericModal extends StatelessWidget {
     required this.onClose,
     required this.child,
     this.titleExtra,
-    this.maxWidth = 660,
+    this.maxWidth = 720,
   });
 
   @override
   Widget build(BuildContext context) {
     final screenSize = MediaQuery.of(context).size;
-    final availableW = (screenSize.width - 32).clamp(280.0, maxWidth);
-    final targetH = availableW * (447.0 / 558.0);
-    final maxH = screenSize.height * 0.92;
-    final modalH = targetH > maxH ? maxH : targetH;
-    final modalW = modalH * (558.0 / 447.0);
+    final maxAllowedW = (screenSize.width - 32).clamp(280.0, maxWidth);
+    final maxAllowedH = screenSize.height * 0.92;
+
+    // Maintain native GenericModal.png aspect ratio (1402 : 1122 ≈ 1.25 : 1)
+    double modalW = maxAllowedW;
+    double modalH = modalW * (1122.0 / 1402.0);
+    if (modalH > maxAllowedH) {
+      modalH = maxAllowedH;
+      modalW = modalH * (1402.0 / 1122.0);
+    }
 
     return Dialog(
       backgroundColor: Colors.transparent,
@@ -33,8 +38,9 @@ class GenericModal extends StatelessWidget {
           width: modalW,
           height: modalH,
           child: Stack(
+            clipBehavior: Clip.none,
             children: [
-              // Handcrafted GenericModal.png Frame
+              // ── Background frame (Handcrafted GenericModal.png) ──
               Positioned.fill(
                 child: Image.asset(
                   'assets/ui/GenericModal.png',
@@ -43,7 +49,7 @@ class GenericModal extends StatelessWidget {
                 ),
               ),
 
-              // Title placed directly inside the top wooden banner
+              // Title placed inside the top wooden banner
               Positioned(
                 left: modalW * 0.20,
                 right: modalW * 0.20,
@@ -89,15 +95,16 @@ class GenericModal extends StatelessWidget {
                 ),
               ),
 
-              // Top-Right Red (X) Close Button Overlay (over illustrated button on asset)
+              // Close (X) Button positioned exactly over the red 'X' in GenericModal.png
               Positioned(
                 left: modalW * 0.825,
-                top: modalH * 0.125,
-                width: modalW * 0.085,
-                height: modalH * 0.11,
+                top: modalH * 0.08,
+                width: modalW * 0.09,
+                height: modalW * 0.09,
                 child: MouseRegion(
                   cursor: SystemMouseCursors.click,
                   child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
                     onTap: onClose,
                     child: Container(
                       decoration: const BoxDecoration(
@@ -109,12 +116,12 @@ class GenericModal extends StatelessWidget {
                 ),
               ),
 
-              // Inner Parchment Scrollable Content Area (Accurately bounded to avoid frame overlap)
+              // Inner content area inside the parchment frame — bounded for ListViews and scrolls
               Positioned(
                 left: modalW * 0.145,
                 right: modalW * 0.145,
-                top: modalH * 0.255,
-                bottom: modalH * 0.125,
+                top: modalH * 0.235,
+                bottom: modalH * 0.085,
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(16),
                   child: Padding(
