@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'state/game_controller.dart';
 import 'services/audio_service.dart';
+import 'services/local_save_service.dart';
 import 'components/common/loading_screen.dart';
+import 'components/common/username_setup_overlay.dart';
 import 'components/common/walkthrough_overlay.dart';
 import 'models/walkthrough_step.dart';
 import 'pages/world_view_page.dart';
@@ -27,7 +29,11 @@ class DogtopiaApp extends StatelessWidget {
         brightness: Brightness.dark,
         scaffoldBackgroundColor: const Color(0xFF120601),
         fontFamily: 'Fredoka',
-        fontFamilyFallback: const ['Lilita One', 'Arial Rounded MT Bold', 'sans-serif'],
+        fontFamilyFallback: const [
+          'Lilita One',
+          'Arial Rounded MT Bold',
+          'sans-serif',
+        ],
         colorScheme: const ColorScheme.dark(
           primary: Color(0xFFF59E0B),
           secondary: Color(0xFFEC4899),
@@ -46,10 +52,12 @@ class DogtopiaRoot extends StatefulWidget {
   State<DogtopiaRoot> createState() => _DogtopiaRootState();
 }
 
-class _DogtopiaRootState extends State<DogtopiaRoot> {
+class _DogtopiaRootState extends State<DogtopiaRoot>
+    with WidgetsBindingObserver {
   final GameController _game = GameController();
-  final ValueNotifier<Rect?> _walkthroughWorldTargetRect =
-      ValueNotifier<Rect?>(null);
+  final ValueNotifier<Rect?> _walkthroughWorldTargetRect = ValueNotifier<Rect?>(
+    null,
+  );
   final Map<String, GlobalKey> _walkthroughKeys = {
     WalkthroughTargets.hudResources: GlobalKey(),
     WalkthroughTargets.hudCareDog: GlobalKey(),
@@ -64,17 +72,44 @@ class _DogtopiaRootState extends State<DogtopiaRoot> {
     WalkthroughTargets.factoryBackButton: GlobalKey(),
   };
   bool _isLoading = true;
+  bool _saveHydrated = false;
   String _currentRoute = 'world';
   Map<String, dynamic> _routeArgs = {};
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _game.addListener(_onGameStateChanged);
+
+    LocalSaveService.instance.loadInto(_game).then((_) {
+      if (mounted) {
+        setState(() => _saveHydrated = true);
+      }
+    });
+
     SoundManager.instance.init().then((_) {
       if (_game.bgmEnabled) {
         SoundManager.instance.startBgm();
       }
     });
+  }
+
+  void _onGameStateChanged() {
+    if (_saveHydrated && _game.hasUsername) {
+      LocalSaveService.instance.scheduleAutoSave(_game);
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (_saveHydrated &&
+        _game.hasUsername &&
+        (state == AppLifecycleState.paused ||
+            state == AppLifecycleState.inactive ||
+            state == AppLifecycleState.detached)) {
+      LocalSaveService.instance.saveNow(_game);
+    }
   }
 
   void _navigateTo(String route, {Map<String, dynamic>? args}) {
@@ -88,6 +123,13 @@ class _DogtopiaRootState extends State<DogtopiaRoot> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _game.removeListener(_onGameStateChanged);
+    if (_saveHydrated && _game.hasUsername) {
+      LocalSaveService.instance.saveNow(_game);
+    } else {
+      LocalSaveService.instance.cancelPending();
+    }
     _walkthroughWorldTargetRect.dispose();
     SoundManager.instance.dispose();
     _game.dispose();
@@ -113,7 +155,7 @@ class _DogtopiaRootState extends State<DogtopiaRoot> {
                   if (_game.bgmEnabled) {
                     SoundManager.instance.startBgm();
                   }
-                  if (_game.walkthroughActive) {
+                  if (_game.hasUsername && _game.walkthroughActive) {
                     SoundManager.instance.playWalkthroughPop();
                   }
                 }
@@ -124,9 +166,12 @@ class _DogtopiaRootState extends State<DogtopiaRoot> {
           Widget activePage;
           switch (_currentRoute) {
             case 'factory':
-              final habitat = _routeArgs['habitat'] as HabitatModel? ??
-                  _game.placedHabitats.firstWhere((h) => h.isFactory,
-                      orElse: () => HabitatModel.createDefaultDogfoodFactory());
+              final habitat =
+                  _routeArgs['habitat'] as HabitatModel? ??
+                  _game.placedHabitats.firstWhere(
+                    (h) => h.isFactory,
+                    orElse: () => HabitatModel.createDefaultDogfoodFactory(),
+                  );
               activePage = DogFactoryInsidePage(
                 game: _game,
                 habitat: habitat,
@@ -136,9 +181,11 @@ class _DogtopiaRootState extends State<DogtopiaRoot> {
               break;
 
             case 'habitat':
-              final habitat = _routeArgs['habitat'] as HabitatModel? ??
+              final habitat =
+                  _routeArgs['habitat'] as HabitatModel? ??
                   _game.placedHabitats.first;
-              final initialDogIndex = _routeArgs['initialDogIndex'] as int? ?? 0;
+              final initialDogIndex =
+                  _routeArgs['initialDogIndex'] as int? ?? 0;
               if (habitat.isFactory) {
                 activePage = DogFactoryInsidePage(
                   game: _game,
@@ -153,10 +200,10 @@ class _DogtopiaRootState extends State<DogtopiaRoot> {
                   initialDogIndex: initialDogIndex,
                   onBackToWorld: () => _navigateTo('world'),
                   onStartTransferDog: (dog, fromHabId) {
-                    _navigateTo('world', args: {
-                      'transferDog': dog,
-                      'fromHabitatId': fromHabId,
-                    });
+                    _navigateTo(
+                      'world',
+                      args: {'transferDog': dog, 'fromHabitatId': fromHabId},
+                    );
                   },
                   walkthroughKeys: _walkthroughKeys,
                 );
@@ -192,7 +239,17 @@ class _DogtopiaRootState extends State<DogtopiaRoot> {
             fit: StackFit.expand,
             children: [
               activePage,
-              if (_game.walkthroughActive)
+              if (!_game.hasUsername)
+                UsernameSetupOverlay(
+                  onConfirmUsername: (name) {
+                    _game.setUsername(name);
+                    LocalSaveService.instance.saveNow(_game);
+                    if (_game.walkthroughActive) {
+                      SoundManager.instance.playWalkthroughPop();
+                    }
+                  },
+                )
+              else if (_game.walkthroughActive)
                 WalkthroughOverlay(
                   game: _game,
                   currentRoute: _currentRoute,

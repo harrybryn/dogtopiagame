@@ -50,6 +50,16 @@ class WorldHUD extends StatelessWidget {
     return n.toString();
   }
 
+  String _fmtXp(int n) {
+    if (n >= 1000000) {
+      return '${(n / 1000000).toStringAsFixed(1)}M';
+    }
+    if (n >= 10000) {
+      return '${(n / 1000).toStringAsFixed(1)}K';
+    }
+    return n.toString();
+  }
+
   @override
   Widget build(BuildContext context) {
     final selectedHab = game.selectedHabitat;
@@ -70,125 +80,276 @@ class WorldHUD extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // ── 1. LEVEL & XP BAR (progress-bar.webp) with Hover Effect ──
-              HoverScale(
-                scale: 1.04,
-                onTap: onOpenProgress,
-                tooltip: 'Player Level & Milestone Progress (Click to view)',
-                child: SizedBox(
-                  width: xpBarW,
-                  height: xpBarH,
-                  child: Stack(
-                    children: [
-                      // Handcrafted progress-bar.webp asset
-                      Positioned.fill(
-                        child: Image.asset(
-                          'assets/ui/progress-bar.webp',
-                          fit: BoxFit.fill,
-                          filterQuality: FilterQuality.high,
-                        ),
-                      ),
-
-                      // Level Number in golden circle (centered at 27.2% horizontal, 48.5% vertical)
-                      Positioned(
-                        left: xpBarW * 0.272 - 30,
-                        top: xpBarH * 0.485 - 30,
-                        width: 60,
-                        height: 60,
-                        child: Center(
-                          child: Text(
-                            '${game.level}',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 38,
-                              fontWeight: FontWeight.w900,
-                              fontFamily: 'Lilita One',
-                              shadows: [
-                                Shadow(
-                                  color: Color(0xFF3B1404),
-                                  offset: Offset(0, 2.5),
-                                  blurRadius: 1,
-                                ),
-                                Shadow(
-                                  color: Color(0xFF1F0A02),
-                                  offset: Offset(0, 4),
-                                  blurRadius: 1,
-                                ),
-                                Shadow(
-                                  color: Color(0xCC000000),
-                                  offset: Offset(0, 5),
-                                  blurRadius: 7,
-                                ),
-                              ],
+              // ── 1. LEVEL & XP BAR + USERNAME BESIDE LEVEL ──
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  HoverScale(
+                    scale: 1.04,
+                    onTap: onOpenProgress,
+                    tooltip:
+                        'Level ${game.level} (${game.xp}/${game.maxXp} XP) · Tap for 5-Level Milestone Rewards',
+                    child: SizedBox(
+                      width: xpBarW,
+                      height: xpBarH,
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          // Handcrafted progress-bar.webp asset
+                          Positioned.fill(
+                            child: Image.asset(
+                              'assets/ui/progress-bar.webp',
+                              fit: BoxFit.fill,
+                              filterQuality: FilterQuality.high,
                             ),
                           ),
-                        ),
-                      ),
 
-                      // Liquid Gold XP Fill & Value Text accurately fitted inside wooden channel
-                      Positioned(
-                        left: xpBarW * 0.40,
-                        right: xpBarW * 0.065,
-                        top: xpBarH * 0.27,
-                        bottom: xpBarH * 0.30,
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(6),
-                          child: Stack(
-                            alignment: Alignment.centerLeft,
-                            children: [
-                              // Liquid Gold Progress Fill
-                              FractionallySizedBox(
-                                widthFactor: xpPercent / 100.0,
-                                heightFactor: 1.0,
-                                child: Container(
-                                  decoration: const BoxDecoration(
-                                    gradient: LinearGradient(
-                                      colors: [
-                                        Color(0xFFFFD700),
-                                        Color(0xFFF59E0B),
-                                        Color(0xFFB45309),
-                                        Color(0xFF78350F),
-                                      ],
-                                      begin: Alignment.topCenter,
-                                      end: Alignment.bottomCenter,
+                          // Level Number in golden circle (centered at 27.2% horizontal, 48.5% vertical)
+                          Positioned(
+                            left: xpBarW * 0.272 - 30,
+                            top: xpBarH * 0.485 - 30,
+                            width: 60,
+                            height: 60,
+                            child: Center(
+                              child: Text(
+                                '${game.level}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 38,
+                                  fontWeight: FontWeight.w900,
+                                  fontFamily: 'Lilita One',
+                                  shadows: [
+                                    Shadow(
+                                      color: Color(0xFF3B1404),
+                                      offset: Offset(0, 2.5),
+                                      blurRadius: 1,
                                     ),
-                                  ),
+                                    Shadow(
+                                      color: Color(0xFF1F0A02),
+                                      offset: Offset(0, 4),
+                                      blurRadius: 1,
+                                    ),
+                                    Shadow(
+                                      color: Color(0xCC000000),
+                                      offset: Offset(0, 5),
+                                      blurRadius: 7,
+                                    ),
+                                  ],
                                 ),
                               ),
+                            ),
+                          ),
 
-                              // XP Label (e.g. "0 XP")
-                              Padding(
-                                padding: const EdgeInsets.only(left: 14),
-                                child: Text(
-                                  '${_fmt(game.xp)} XP',
+                          // Liquid Gold XP Fill & Current / Required XP (e.g. "500 / 1000 XP")
+                          Positioned(
+                            left: xpBarW * 0.40,
+                            right: xpBarW * 0.065,
+                            top: xpBarH * 0.27,
+                            bottom: xpBarH * 0.30,
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(6),
+                              child: Stack(
+                                alignment: Alignment.centerLeft,
+                                children: [
+                                  // Liquid Gold Progress Fill
+                                  FractionallySizedBox(
+                                    widthFactor: xpPercent / 100.0,
+                                    heightFactor: 1.0,
+                                    child: Container(
+                                      decoration: const BoxDecoration(
+                                        gradient: LinearGradient(
+                                          colors: [
+                                            Color(0xFFFFD700),
+                                            Color(0xFFF59E0B),
+                                            Color(0xFFB45309),
+                                            Color(0xFF78350F),
+                                          ],
+                                          begin: Alignment.topCenter,
+                                          end: Alignment.bottomCenter,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+
+                                  // Current / Required XP Label (e.g. "500 / 1000 XP")
+                                  Positioned.fill(
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 10),
+                                      child: Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: FittedBox(
+                                          fit: BoxFit.scaleDown,
+                                          child: Text(
+                                            '${_fmtXp(game.xp)} / ${_fmtXp(game.maxXp)} XP',
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.w900,
+                                              fontSize: 15.5,
+                                              fontFamily: 'Lilita One',
+                                              letterSpacing: 0.5,
+                                              shadows: [
+                                                Shadow(
+                                                  color: Color(0xFF3B1404),
+                                                  offset: Offset(0, 2),
+                                                  blurRadius: 1,
+                                                ),
+                                                Shadow(
+                                                  color: Colors.black,
+                                                  offset: Offset(0, 3),
+                                                  blurRadius: 5,
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+
+                          // Unclaimed 5-Level Milestone Reward Badge
+                          if (game.unclaimedMilestoneCount > 0)
+                            Positioned(
+                              right: -4,
+                              top: 10,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    colors: [
+                                      Color(0xFFEF4444),
+                                      Color(0xFFB91C1C),
+                                    ],
+                                  ),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                      color: const Color(0xFFFEF08A),
+                                      width: 1.8),
+                                  boxShadow: const [
+                                    BoxShadow(
+                                      color: Color(0x99000000),
+                                      blurRadius: 6,
+                                      offset: Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.card_giftcard_rounded,
+                                        color: Color(0xFFFEF08A), size: 13),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      '${game.unclaimedMilestoneCount}',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontFamily: 'Lilita One',
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  // Player Username Plaque Displayed Right Beside the Level Bar
+                  if (game.hasUsername) ...[
+                    const SizedBox(width: 10),
+                    HoverScale(
+                      scale: 1.05,
+                      onTap: onOpenSettings,
+                      tooltip: 'Keeper Profile (${game.playerUsername})',
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 8),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF4B1E06), Color(0xFF260D02)],
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                          ),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                              color: const Color(0xFFFBBF24), width: 2.2),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Color(0xAA000000),
+                              blurRadius: 8,
+                              offset: Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 26,
+                              height: 26,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: const LinearGradient(
+                                  colors: [
+                                    Color(0xFFFDE047),
+                                    Color(0xFFD97706),
+                                  ],
+                                ),
+                                border: Border.all(
+                                    color: const Color(0xFFFFFBEB), width: 1.4),
+                              ),
+                              child: const Icon(Icons.pets_rounded,
+                                  color: Color(0xFF3B1404), size: 15),
+                            ),
+                            const SizedBox(width: 8),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Text(
+                                  'KEEPER',
+                                  style: TextStyle(
+                                    color: Color(0xFFFCD34D),
+                                    fontFamily: 'Lilita One',
+                                    fontSize: 9.5,
+                                    letterSpacing: 1.0,
+                                    height: 1.0,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  game.playerUsername,
                                   style: const TextStyle(
                                     color: Colors.white,
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 16.5,
                                     fontFamily: 'Lilita One',
-                                    letterSpacing: 0.6,
+                                    fontSize: 16,
+                                    letterSpacing: 0.4,
+                                    height: 1.05,
                                     shadows: [
                                       Shadow(
-                                        color: Color(0xFF3B1404),
+                                        color: Color(0xCC000000),
                                         offset: Offset(0, 2),
-                                        blurRadius: 1,
-                                      ),
-                                      Shadow(
-                                        color: Colors.black,
-                                        offset: Offset(0, 3),
-                                        blurRadius: 5,
+                                        blurRadius: 3,
                                       ),
                                     ],
                                   ),
                                 ),
-                              ),
-                            ],
-                          ),
+                              ],
+                            ),
+                          ],
                         ),
                       ),
-                    ],
-                  ),
-                ),
+                    ),
+                  ],
+                ],
               ),
 
               // ── 2. Top-Right Resources Row (Enlarged with Hover Effects) ──

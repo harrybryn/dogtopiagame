@@ -449,7 +449,7 @@ class _WorldViewPageState extends State<WorldViewPage> {
                   onOpenProgress: () {
                     showDialog(
                       context: context,
-                      builder: (_) => const ProgressDialog(),
+                      builder: (_) => ProgressDialog(game: widget.game),
                     );
                   },
                   onOpenSocial: () {

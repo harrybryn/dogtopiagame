@@ -629,6 +629,15 @@ class _WalkthroughOverlayState extends State<WalkthroughOverlay>
     );
   }
 
+  String _personalizedMessage(WalkthroughStep step) {
+    final name = widget.game.playerUsername;
+    if (name.isEmpty) return step.message;
+    if (step.id == WalkthroughStepId.welcome) {
+      return step.message.replaceFirst('Keeper', name);
+    }
+    return step.message;
+  }
+
   Widget _buildCenterModal(
     BuildContext context,
     WalkthroughStep step,
@@ -719,7 +728,7 @@ class _WalkthroughOverlayState extends State<WalkthroughOverlay>
 
                       // Message
                       Text(
-                        step.message,
+                        _personalizedMessage(step),
                         textAlign: TextAlign.center,
                         style: const TextStyle(
                           color: Color(0xFF3B1404),

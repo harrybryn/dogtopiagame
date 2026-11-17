@@ -1,6 +1,8 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import '../../state/game_controller.dart';
 import '../../services/audio_service.dart';
+import '../../services/local_save_service.dart';
 import '../common/generic_modal.dart';
 import '../common/hover_scale.dart';
 
@@ -14,6 +16,88 @@ class SettingsDialog extends StatefulWidget {
 }
 
 class _SettingsDialogState extends State<SettingsDialog> {
+  bool _justSaved = false;
+
+  Future<void> _handleManualSave() async {
+    final ok = await LocalSaveService.instance.saveNow(widget.game);
+    if (ok && mounted) {
+      SoundManager.instance.playClick();
+      setState(() => _justSaved = true);
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) setState(() => _justSaved = false);
+      });
+    }
+  }
+
+  void _openEditUsernameDialog() {
+    final controller =
+        TextEditingController(text: widget.game.playerUsername);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF2A1205),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: Color(0xFFFBBF24), width: 2),
+        ),
+        title: const Text(
+          'CHANGE USERNAME',
+          style: TextStyle(
+            color: Color(0xFFFEF08A),
+            fontFamily: 'Lilita One',
+            fontSize: 18,
+          ),
+        ),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLength: 16,
+          style: const TextStyle(
+            color: Colors.white,
+            fontFamily: 'Lilita One',
+            fontSize: 16,
+          ),
+          decoration: const InputDecoration(
+            counterStyle: TextStyle(color: Colors.white54),
+            hintText: 'Enter username (2-16 chars)...',
+            hintStyle: TextStyle(color: Colors.white38),
+            enabledBorder: UnderlineInputBorder(
+              borderSide: BorderSide(color: Color(0xFFF59E0B)),
+            ),
+            focusedBorder: UnderlineInputBorder(
+              borderSide: BorderSide(color: Color(0xFFFEF08A), width: 2),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('CANCEL',
+                style: TextStyle(color: Colors.white70, fontFamily: 'Lilita One')),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final next = controller.text.trim();
+              if (next.length >= 2 && next.length <= 16) {
+                widget.game.setUsername(next);
+                LocalSaveService.instance.saveNow(widget.game);
+                if (mounted) setState(() {});
+                Navigator.pop(ctx);
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFF59E0B),
+              foregroundColor: const Color(0xFF3B1404),
+            ),
+            child: const Text('SAVE',
+                style: TextStyle(
+                    fontWeight: FontWeight.w900, fontFamily: 'Lilita One')),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return GenericModal(
@@ -26,6 +110,10 @@ class _SettingsDialogState extends State<SettingsDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // ── 0. Player Profile & Local Save Card ──
+            _buildProfileSaveCard(),
+            const SizedBox(height: 8),
+
             // ── 1. Sound Effects (SFX) Card with Integrated Adjuster ──
             _buildSettingCard(
               title: 'Sound Effects (SFX)',
@@ -99,6 +187,377 @@ class _SettingsDialogState extends State<SettingsDialog> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showGoogleConnectPreviewDialog() {
+    SoundManager.instance.playClick();
+    final name = widget.game.hasUsername ? widget.game.playerUsername : 'Keeper';
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF2A1205),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: const BorderSide(color: Color(0xFFFBBF24), width: 2.5),
+        ),
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 30,
+              height: 30,
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+              ),
+              padding: const EdgeInsets.all(6),
+              child: CustomPaint(painter: _GoogleLogoPainter()),
+            ),
+            const SizedBox(width: 10),
+            const Text(
+              'GOOGLE CLOUD SAVE',
+              style: TextStyle(
+                color: Color(0xFFFEF08A),
+                fontFamily: 'Lilita One',
+                fontSize: 18,
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          'Your island "$name" (Level ${widget.game.level}) is currently auto-saved locally on this device.\n\nGoogle + Supabase Cloud Sync is ready to link once online saving is enabled!',
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: Color(0xFFFEF3C7),
+            fontFamily: 'Fredoka',
+            fontWeight: FontWeight.w600,
+            fontSize: 13.5,
+            height: 1.4,
+          ),
+        ),
+        actionsAlignment: MainAxisAlignment.center,
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFF59E0B),
+              foregroundColor: const Color(0xFF3B1404),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
+            child: const Text(
+              'GOT IT',
+              style: TextStyle(
+                fontFamily: 'Lilita One',
+                fontWeight: FontWeight.w900,
+                fontSize: 14,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProfileSaveCard() {
+    final name = widget.game.hasUsername ? widget.game.playerUsername : 'Guest';
+
+    return Container(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFFFFFFFF), Color(0xFFFFFBF2), Color(0xFFFAECD5)],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFD97706), width: 2.0),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x1C78350F),
+            offset: Offset(0, 3),
+            blurRadius: 6,
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // ── Top Row: Keeper Avatar, Username, Edit & Save Now ──
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+            child: Row(
+              children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFFDE047), Color(0xFFD97706)],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                    ),
+                    border: Border.all(color: const Color(0xFF78350F), width: 1.8),
+                  ),
+                  child: const Icon(Icons.pets_rounded,
+                      color: Color(0xFF3B1404), size: 20),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              name,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Color(0xFF3B1404),
+                                fontFamily: 'Lilita One',
+                                fontSize: 16,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFEF3C7),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                  color: const Color(0xFFD97706), width: 1),
+                            ),
+                            child: Text(
+                              'LVL ${widget.game.level}',
+                              style: const TextStyle(
+                                color: Color(0xFF92400E),
+                                fontFamily: 'Lilita One',
+                                fontSize: 10,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          Container(
+                            width: 7,
+                            height: 7,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFF10B981),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 5),
+                          const Text(
+                            'Auto-saved locally on this device',
+                            style: TextStyle(
+                              color: Color(0xFF047857),
+                              fontFamily: 'Fredoka',
+                              fontWeight: FontWeight.w700,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                HoverScale(
+                  scale: 1.06,
+                  onTap: _openEditUsernameDialog,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: const Color(0x24B45309),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                          color: const Color(0xFFD97706), width: 1.2),
+                    ),
+                    child: const Text(
+                      'EDIT',
+                      style: TextStyle(
+                        color: Color(0xFF78350F),
+                        fontFamily: 'Lilita One',
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                HoverScale(
+                  scale: 1.06,
+                  onTap: _handleManualSave,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
+                    decoration: BoxDecoration(
+                      gradient: _justSaved
+                          ? const LinearGradient(
+                              colors: [Color(0xFF10B981), Color(0xFF059669)],
+                            )
+                          : const LinearGradient(
+                              colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
+                            ),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.white, width: 1.2),
+                    ),
+                    child: Text(
+                      _justSaved ? 'SAVED!' : 'SAVE NOW',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontFamily: 'Lilita One',
+                        fontSize: 11,
+                        letterSpacing: 0.4,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // ── Bottom Banner: Beautiful Connect with Google Cloud Save UI ──
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFF3E1805), Color(0xFF260D02)],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
+              borderRadius: BorderRadius.vertical(bottom: Radius.circular(16)),
+              border: Border(
+                top: BorderSide(color: Color(0x88FBBF24), width: 1.2),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.cloud_upload_rounded,
+                        color: Color(0xFF67E8F9), size: 17),
+                    const SizedBox(width: 6),
+                    const Expanded(
+                      child: Text(
+                        'CLOUD ACCOUNT BACKUP',
+                        style: TextStyle(
+                          color: Color(0xFFFEF08A),
+                          fontFamily: 'Lilita One',
+                          fontSize: 12,
+                          letterSpacing: 0.7,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0x33FBBF24),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                            color: const Color(0x99FBBF24), width: 1),
+                      ),
+                      child: const Text(
+                        'NOT CONNECTED',
+                        style: TextStyle(
+                          color: Color(0xFFFDE68A),
+                          fontFamily: 'Lilita One',
+                          fontSize: 9.5,
+                          letterSpacing: 0.4,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Link your Google account to save your island online and play across devices.',
+                  style: TextStyle(
+                    color: Color(0xCCFEF3C7),
+                    fontFamily: 'Fredoka',
+                    fontWeight: FontWeight.w600,
+                    fontSize: 11.5,
+                  ),
+                ),
+                const SizedBox(height: 10),
+
+                // Tactile Elevated Google Sign-In Button
+                HoverScale(
+                  scale: 1.025,
+                  onTap: _showGoogleConnectPreviewDialog,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                          color: const Color(0xFFE5E7EB), width: 1.5),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x66000000),
+                          blurRadius: 10,
+                          offset: Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CustomPaint(painter: _GoogleLogoPainter()),
+                        ),
+                        const SizedBox(width: 11),
+                        const Text(
+                          'Connect with Google',
+                          style: TextStyle(
+                            color: Color(0xFF1F2937),
+                            fontFamily: 'Fredoka',
+                            fontWeight: FontWeight.w800,
+                            fontSize: 14.5,
+                            letterSpacing: 0.2,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 7, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFDBEAFE),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Text(
+                            'CLOUD',
+                            style: TextStyle(
+                              color: Color(0xFF1D4ED8),
+                              fontFamily: 'Lilita One',
+                              fontSize: 9.5,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -361,4 +820,64 @@ class _SettingsDialogState extends State<SettingsDialog> {
       ),
     );
   }
+}
+
+class _GoogleLogoPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final stroke = size.width * 0.21;
+    final rect = Rect.fromLTWH(
+      stroke / 2,
+      stroke / 2,
+      size.width - stroke,
+      size.height - stroke,
+    );
+
+    final redPaint = Paint()
+      ..color = const Color(0xFFEA4335)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.butt;
+    final yellowPaint = Paint()
+      ..color = const Color(0xFFFBBC05)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.butt;
+    final greenPaint = Paint()
+      ..color = const Color(0xFF34A853)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.butt;
+    final bluePaint = Paint()
+      ..color = const Color(0xFF4285F4)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.butt;
+
+    // Top-left to top-right red arc
+    canvas.drawArc(rect, -pi * 0.85, pi * 0.62, false, redPaint);
+    // Left yellow arc
+    canvas.drawArc(rect, pi * 0.68, pi * 0.47, false, yellowPaint);
+    // Bottom green arc
+    canvas.drawArc(rect, pi * 0.14, pi * 0.56, false, greenPaint);
+    // Right blue arc
+    canvas.drawArc(rect, -pi * 0.04, pi * 0.22, false, bluePaint);
+
+    // Blue horizontal crossbar of the "G"
+    final barPaint = Paint()
+      ..color = const Color(0xFF4285F4)
+      ..style = PaintingStyle.fill;
+    canvas.drawRect(
+      Rect.fromLTWH(
+        size.width * 0.50,
+        size.height * 0.41,
+        size.width * 0.48,
+        stroke * 0.92,
+      ),
+      barPaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

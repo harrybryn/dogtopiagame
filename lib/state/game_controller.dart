@@ -8,10 +8,15 @@ import '../models/habitat_catalog.dart';
 import '../models/dog_evolution.dart';
 import '../models/obstacle_model.dart';
 import '../models/food_recipe_model.dart';
+import '../models/level_milestone.dart';
 import '../models/walkthrough_step.dart';
 import '../services/audio_service.dart';
 
 class GameController extends ChangeNotifier {
+  // Player profile & persistence metadata
+  String _playerUsername = '';
+  int _savedAt = 0;
+
   // Currencies
   int _coins = 5000;
   int _crystals = 25;
@@ -54,10 +59,15 @@ class GameController extends ChangeNotifier {
   // Interactive Dog Wizard walkthrough state
   bool _walkthroughActive = true;
   int _walkthroughStepIndex = 0;
+  bool _walkthroughCompleted = false;
   bool _walkthroughRewardClaimed = false;
+
+  // Claimed every-5-levels milestone rewards (e.g. {5, 10, 15})
+  Set<int> _claimedLevelMilestones = {};
 
   GameController({bool startWalkthrough = true}) {
     _walkthroughActive = startWalkthrough;
+    _walkthroughCompleted = !startWalkthrough;
     SoundManager.instance.setBgmEnabled(_bgmEnabled);
     SoundManager.instance.setSfxEnabled(_sfxEnabled);
     SoundManager.instance.setBgmVolume(_bgmVolume);
@@ -66,6 +76,9 @@ class GameController extends ChangeNotifier {
   }
 
   // Getters
+  String get playerUsername => _playerUsername;
+  bool get hasUsername => _playerUsername.trim().isNotEmpty;
+  int get savedAt => _savedAt;
   int get coins => _coins;
   int get crystals => _crystals;
   int get kibble => _kibble;
@@ -89,7 +102,148 @@ class GameController extends ChangeNotifier {
   bool get walkthroughActive => _walkthroughActive;
   int get walkthroughStepIndex => _walkthroughStepIndex;
   int get walkthroughTotalSteps => WalkthroughStep.steps.length;
+  bool get walkthroughCompleted => _walkthroughCompleted;
   bool get walkthroughRewardClaimed => _walkthroughRewardClaimed;
+  Set<int> get claimedLevelMilestones => Set.unmodifiable(_claimedLevelMilestones);
+
+  /// Every-5-levels milestone list (always extends at least one milestone ahead of current level).
+  List<LevelMilestone> get levelMilestones {
+    final maxLevel = max(30, (((_level ~/ 5) + 2) * 5));
+    return [
+      for (int lvl = 5; lvl <= maxLevel; lvl += 5) LevelMilestone.forLevel(lvl),
+    ];
+  }
+
+  int get nextMilestoneLevel => ((_level ~/ 5) + 1) * 5;
+
+  bool isMilestoneClaimed(int milestoneLevel) =>
+      _claimedLevelMilestones.contains(milestoneLevel);
+
+  bool canClaimMilestone(int milestoneLevel) =>
+      milestoneLevel > 0 &&
+      milestoneLevel % 5 == 0 &&
+      _level >= milestoneLevel &&
+      !_claimedLevelMilestones.contains(milestoneLevel);
+
+  int get unclaimedMilestoneCount {
+    int count = 0;
+    for (int lvl = 5; lvl <= _level; lvl += 5) {
+      if (!_claimedLevelMilestones.contains(lvl)) count++;
+    }
+    return count;
+  }
+
+  bool claimLevelMilestone(int milestoneLevel) {
+    if (!canClaimMilestone(milestoneLevel)) return false;
+    final milestone = LevelMilestone.forLevel(milestoneLevel);
+    _claimedLevelMilestones.add(milestoneLevel);
+    _coins += milestone.rewardCoins;
+    _crystals += milestone.rewardCrystals;
+    _kibble += milestone.rewardKibble;
+    SoundManager.instance.playQuestReward();
+    notifyListeners();
+    return true;
+  }
+
+  void setUsername(String name) {
+    final cleaned = name.trim();
+    if (cleaned.isEmpty) return;
+    _playerUsername = cleaned;
+    SoundManager.instance.playClick();
+    notifyListeners();
+  }
+
+  Map<String, dynamic> toJson() {
+    _savedAt = DateTime.now().millisecondsSinceEpoch;
+    return {
+      'schemaVersion': 1,
+      'playerUsername': _playerUsername,
+      'savedAt': _savedAt,
+      'coins': _coins,
+      'crystals': _crystals,
+      'kibble': _kibble,
+      'level': _level,
+      'xp': _xp,
+      'maxXp': _maxXp,
+      'sfxEnabled': _sfxEnabled,
+      'bgmEnabled': _bgmEnabled,
+      'sfxVolume': _sfxVolume,
+      'bgmVolume': _bgmVolume,
+      'gridVisible': _gridVisible,
+      'isLot1Unlocked': _isLot1Unlocked,
+      'isLot2Unlocked': _isLot2Unlocked,
+      'walkthroughCompleted': _walkthroughCompleted,
+      'walkthroughRewardClaimed': _walkthroughRewardClaimed,
+      'claimedLevelMilestones': _claimedLevelMilestones.toList()..sort(),
+      'placedHabitats': _placedHabitats.map((h) => h.toJson()).toList(),
+      'obstacles': _obstacles.map((o) => o.toJson()).toList(),
+      'tasks': _tasks.map((t) => t.toJson()).toList(),
+    };
+  }
+
+  void loadFromJson(Map<String, dynamic> json) {
+    _playerUsername = (json['playerUsername'] as String? ?? '').trim();
+    _savedAt = json['savedAt'] as int? ?? 0;
+    _coins = json['coins'] as int? ?? 5000;
+    _crystals = json['crystals'] as int? ?? 25;
+    _kibble = json['kibble'] as int? ?? 1000;
+    _level = json['level'] as int? ?? 1;
+    _xp = json['xp'] as int? ?? 0;
+    _maxXp = json['maxXp'] as int? ?? 500;
+
+    _sfxEnabled = json['sfxEnabled'] as bool? ?? true;
+    _bgmEnabled = json['bgmEnabled'] as bool? ?? true;
+    _sfxVolume = (json['sfxVolume'] as num?)?.toDouble() ?? 0.8;
+    _bgmVolume = (json['bgmVolume'] as num?)?.toDouble() ?? 0.5;
+    _gridVisible = json['gridVisible'] as bool? ?? false;
+
+    _isLot1Unlocked = json['isLot1Unlocked'] as bool? ?? false;
+    _isLot2Unlocked = json['isLot2Unlocked'] as bool? ?? false;
+
+    _walkthroughCompleted = json['walkthroughCompleted'] as bool? ?? false;
+    _walkthroughRewardClaimed =
+        json['walkthroughRewardClaimed'] as bool? ?? false;
+    _walkthroughActive = !_walkthroughCompleted;
+    _walkthroughStepIndex = 0;
+
+    final rawMilestones = json['claimedLevelMilestones'] as List<dynamic>?;
+    _claimedLevelMilestones = rawMilestones != null
+        ? rawMilestones.map((e) => (e as num).toInt()).toSet()
+        : {};
+
+    final rawHabitats = json['placedHabitats'] as List<dynamic>?;
+    if (rawHabitats != null && rawHabitats.isNotEmpty) {
+      _placedHabitats = rawHabitats
+          .map((h) => HabitatModel.fromJson(Map<String, dynamic>.from(h as Map)))
+          .toList();
+    }
+
+    final rawObstacles = json['obstacles'] as List<dynamic>?;
+    if (rawObstacles != null) {
+      _obstacles = rawObstacles
+          .map((o) => ObstacleModel.fromJson(Map<String, dynamic>.from(o as Map)))
+          .toList();
+    }
+
+    final rawTasks = json['tasks'] as List<dynamic>?;
+    if (rawTasks != null && rawTasks.isNotEmpty) {
+      _tasks = rawTasks
+          .map((t) => TaskModel.fromJson(Map<String, dynamic>.from(t as Map)))
+          .toList();
+    }
+
+    _selectedHabitatId = null;
+    _selectedObstacleId = null;
+
+    SoundManager.instance.setBgmEnabled(_bgmEnabled);
+    SoundManager.instance.setSfxEnabled(_sfxEnabled);
+    SoundManager.instance.setBgmVolume(_bgmVolume);
+    SoundManager.instance.setSfxVolume(_sfxVolume);
+
+    // Resolve any baking/income progress completed while the app was closed
+    tickIncome();
+    notifyListeners();
+  }
 
   WalkthroughStep? get currentWalkthroughStep {
     if (!_walkthroughActive) return null;
@@ -173,6 +327,7 @@ class GameController extends ChangeNotifier {
   void skipWalkthrough() {
     if (!_walkthroughActive) return;
     _walkthroughActive = false;
+    _walkthroughCompleted = true;
     SoundManager.instance.playClick();
     notifyListeners();
   }
@@ -188,6 +343,7 @@ class GameController extends ChangeNotifier {
 
   void _completeWalkthrough({required bool grantReward}) {
     _walkthroughActive = false;
+    _walkthroughCompleted = true;
     if (grantReward && !_walkthroughRewardClaimed) {
       _walkthroughRewardClaimed = true;
       _coins += 500;
@@ -821,9 +977,7 @@ class GameController extends ChangeNotifier {
       _xp -= _maxXp;
       _level += 1;
       _maxXp = (_maxXp * 1.3).floor();
-      // Level up rewards
-      _crystals += 5;
-      _coins += 500;
+      // Milestone rewards are claimable every 5 levels (Levels 5, 10, 15, ...)
       SoundManager.instance.playLevelUp();
     }
   }
