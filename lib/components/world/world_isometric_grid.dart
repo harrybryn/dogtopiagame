@@ -5,6 +5,7 @@ import '../../models/habitat_model.dart';
 import '../../models/habitat_catalog.dart';
 import '../../models/dog_evolution.dart';
 import '../../models/obstacle_model.dart';
+import '../../services/audio_service.dart';
 import '../common/hover_scale.dart';
 import '../common/loading_progress_bar.dart';
 import 'habitat_wandering_dog.dart';
@@ -460,6 +461,7 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
             widget.onCompleteConstruction?.call(hab.id);
             return;
           }
+          if (hab.dogs.isNotEmpty) { SoundManager.instance.playDogBark(isPuppy: hab.dogs.first.isPuppy); } else { SoundManager.instance.playClick(); }
           widget.onSelectHabitat(hab);
         },
         onPanUpdate: (details) {

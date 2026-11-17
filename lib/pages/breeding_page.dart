@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../state/game_controller.dart';
+import '../services/audio_service.dart';
 
 class BreedingPage extends StatefulWidget {
   final GameController game;
@@ -31,6 +32,7 @@ class _BreedingPageState extends State<BreedingPage> {
 
   void _startBreeding() {
     if (widget.game.coins < 500) {
+      SoundManager.instance.playSadWhimper();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('You need 500 Paw Coins to breed!')),
       );
@@ -41,12 +43,15 @@ class _BreedingPageState extends State<BreedingPage> {
 
     setState(() {
       _breedingState = 'breeding';
+      SoundManager.instance.playBake();
     });
 
     Timer(const Duration(milliseconds: 2800), () {
       if (!mounted) return;
       setState(() {
         _breedingState = 'hatched';
+        SoundManager.instance.playLevelUp();
+        SoundManager.instance.playDogBark(isPuppy: true, force: true);
         _hatchedPup = {
           'name': 'Sun Chaser Pup',
           'desc':

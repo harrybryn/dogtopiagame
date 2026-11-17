@@ -1,4 +1,3 @@
-import 'dart:math';
 import 'package:flutter/material.dart';
 import '../state/game_controller.dart';
 import '../models/habitat_model.dart';
@@ -6,6 +5,7 @@ import '../models/dog_model.dart';
 import '../models/dog_evolution.dart';
 import '../models/habitat_catalog.dart';
 import '../components/common/hover_scale.dart';
+import '../services/audio_service.dart';
 
 class HabitatCarePage extends StatefulWidget {
   final GameController game;
@@ -60,8 +60,11 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
   }
 
   void _petDog() {
+    final dog = _currentDog;
     widget.game.addCoins(50);
     setState(() => _showPetHeart = true);
+    SoundManager.instance.playPet();
+    SoundManager.instance.playDogBark(isPuppy: dog?.isPuppy ?? true, force: true);
     _showToast('+50 Paw Coins! Companion Loved!');
     Future.delayed(const Duration(milliseconds: 1400), () {
       if (mounted) setState(() => _showPetHeart = false);

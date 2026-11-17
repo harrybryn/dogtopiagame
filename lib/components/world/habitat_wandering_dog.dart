@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import '../../models/dog_model.dart';
 import '../../models/dog_evolution.dart';
+import '../../services/audio_service.dart';
 
 /// Waypoints on the habitat patio lawn (relative to habitat footprint center).
 const List<Offset> _patrolWaypoints = [
@@ -250,7 +251,7 @@ class _HabitatWanderingDogState extends State<HabitatWanderingDog>
             top: spriteOffset.dy,
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onTap: widget.onTap,
+              onTap: () { SoundManager.instance.playDogBark(isPuppy: widget.dog.isPuppy, force: true); widget.onTap?.call(); },
               child: Transform(
                 alignment: Alignment.bottomCenter,
                 transform: Matrix4.identity()

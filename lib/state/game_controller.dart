@@ -8,6 +8,7 @@ import '../models/habitat_catalog.dart';
 import '../models/dog_evolution.dart';
 import '../models/obstacle_model.dart';
 import '../models/food_recipe_model.dart';
+import '../services/audio_service.dart';
 
 class GameController extends ChangeNotifier {
   // Currencies
@@ -21,6 +22,8 @@ class GameController extends ChangeNotifier {
   // Audio settings
   bool _sfxEnabled = true;
   bool _bgmEnabled = true;
+  double _sfxVolume = 0.8;
+  double _bgmVolume = 0.5;
 
   // Grid visibility
   bool _gridVisible = false;
@@ -48,6 +51,10 @@ class GameController extends ChangeNotifier {
   Timer? _incomeTimer;
 
   GameController() {
+    SoundManager.instance.setBgmEnabled(_bgmEnabled);
+    SoundManager.instance.setSfxEnabled(_sfxEnabled);
+    SoundManager.instance.setBgmVolume(_bgmVolume);
+    SoundManager.instance.setSfxVolume(_sfxVolume);
     _startIncomeTimer();
   }
 
@@ -60,6 +67,8 @@ class GameController extends ChangeNotifier {
   int get maxXp => _maxXp;
   bool get sfxEnabled => _sfxEnabled;
   bool get bgmEnabled => _bgmEnabled;
+  double get sfxVolume => _sfxVolume;
+  double get bgmVolume => _bgmVolume;
   bool get gridVisible => _gridVisible;
   List<HabitatModel> get placedHabitats => _placedHabitats;
   List<TaskModel> get tasks => _tasks;
@@ -89,6 +98,7 @@ class GameController extends ChangeNotifier {
     _selectedObstacleId = id;
     if (id != null) {
       _selectedHabitatId = null; // Deselect habitat when selecting obstacle
+      SoundManager.instance.playClick();
     }
     notifyListeners();
   }
@@ -96,12 +106,15 @@ class GameController extends ChangeNotifier {
   bool unlockLot1() {
     if (_isLot1Unlocked) return false;
     const cost = 2500;
-    if (_coins < cost) return false;
+    if (_coins < cost) {
+      SoundManager.instance.playSadWhimper();
+      return false;
+    }
 
     _coins -= cost;
     _isLot1Unlocked = true;
     _addXp(120);
-    // Note: Obstacles are NOT removed on lot unlock; player clears them manually
+    SoundManager.instance.playLevelUp();
     notifyListeners();
     return true;
   }
@@ -109,12 +122,15 @@ class GameController extends ChangeNotifier {
   bool unlockLot2() {
     if (_isLot2Unlocked) return false;
     const cost = 2500;
-    if (_coins < cost) return false;
+    if (_coins < cost) {
+      SoundManager.instance.playSadWhimper();
+      return false;
+    }
 
     _coins -= cost;
     _isLot2Unlocked = true;
     _addXp(120);
-    // Note: Obstacles are NOT removed on lot unlock; player clears them manually
+    SoundManager.instance.playLevelUp();
     notifyListeners();
     return true;
   }
@@ -132,13 +148,17 @@ class GameController extends ChangeNotifier {
           id: '', type: '', name: '', col: 0, row: 0, imageAsset: ''),
     );
     if (obs.id.isEmpty || obs.isClearing) return false;
-    if (_coins < obs.clearCost) return false;
+    if (_coins < obs.clearCost) {
+      SoundManager.instance.playSadWhimper();
+      return false;
+    }
 
     _coins -= obs.clearCost;
     obs.isClearing = true;
     obs.clearingEndsAt =
         DateTime.now().millisecondsSinceEpoch + obs.clearDuration * 1000;
     _selectedObstacleId = obs.id;
+    SoundManager.instance.playChop();
     notifyListeners();
     return true;
   }
@@ -153,6 +173,7 @@ class GameController extends ChangeNotifier {
     if (_selectedObstacleId == obstacleId) {
       _selectedObstacleId = null;
     }
+    SoundManager.instance.playChop();
     notifyListeners();
     return true;
   }
@@ -164,10 +185,14 @@ class GameController extends ChangeNotifier {
           id: '', type: '', name: '', col: 0, row: 0, imageAsset: ''),
     );
     if (obs.id.isEmpty || !obs.isClearing) return false;
-    if (_crystals < crystalsCost) return false;
+    if (_crystals < crystalsCost) {
+      SoundManager.instance.playSadWhimper();
+      return false;
+    }
 
     _crystals -= crystalsCost;
     obs.clearingEndsAt = DateTime.now().millisecondsSinceEpoch;
+    SoundManager.instance.playLevelUp();
     return completeClearingObstacle(obstacleId);
   }
 
@@ -184,12 +209,14 @@ class GameController extends ChangeNotifier {
     _selectedHabitatId = id;
     if (id != null) {
       _selectedObstacleId = null;
+      SoundManager.instance.playClick();
     }
     notifyListeners();
   }
 
   void toggleGrid() {
     _gridVisible = !_gridVisible;
+    SoundManager.instance.playClick();
     notifyListeners();
   }
 
@@ -200,11 +227,28 @@ class GameController extends ChangeNotifier {
 
   void toggleSfx() {
     _sfxEnabled = !_sfxEnabled;
+    SoundManager.instance.setSfxEnabled(_sfxEnabled);
+    if (_sfxEnabled) {
+      SoundManager.instance.playClick();
+    }
     notifyListeners();
   }
 
   void toggleBgm() {
     _bgmEnabled = !_bgmEnabled;
+    SoundManager.instance.setBgmEnabled(_bgmEnabled);
+    notifyListeners();
+  }
+
+  void setSfxVolume(double volume) {
+    _sfxVolume = volume.clamp(0.0, 1.0);
+    SoundManager.instance.setSfxVolume(_sfxVolume);
+    notifyListeners();
+  }
+
+  void setBgmVolume(double volume) {
+    _bgmVolume = volume.clamp(0.0, 1.0);
+    SoundManager.instance.setBgmVolume(_bgmVolume);
     notifyListeners();
   }
 
@@ -252,7 +296,10 @@ class GameController extends ChangeNotifier {
     final h = _placedHabitats.firstWhere((it) => it.id == habitatId,
         orElse: () => HabitatModel(id: '', habitatId: '', name: '', col: 0, row: 0));
     if (h.id.isEmpty || !h.isFactory) return false;
-    if (_coins < recipe.costCoins) return false;
+    if (_coins < recipe.costCoins) {
+      SoundManager.instance.playSadWhimper();
+      return false;
+    }
     if (h.isBaking || (h.readyToCollectDogfood && h.dogfoodAccumulated > 0)) return false;
 
     _coins -= recipe.costCoins;
@@ -268,6 +315,7 @@ class GameController extends ChangeNotifier {
     h.readyToCollectDogfood = false;
     h.dogfoodAccumulated = 0;
 
+    SoundManager.instance.playBake();
     notifyListeners();
     return true;
   }
@@ -279,13 +327,17 @@ class GameController extends ChangeNotifier {
 
     final remainingSecs = h.bakingRemainingSeconds;
     final crystalsNeeded = max(1, (remainingSecs / 900).ceil());
-    if (_crystals < crystalsNeeded) return false;
+    if (_crystals < crystalsNeeded) {
+      SoundManager.instance.playSadWhimper();
+      return false;
+    }
 
     _crystals -= crystalsNeeded;
     h.bakingEndsAt = DateTime.now().millisecondsSinceEpoch;
     h.dogfoodAccumulated = h.bakingFoodAmount ?? 0;
     h.readyToCollectDogfood = true;
 
+    SoundManager.instance.playLevelUp();
     notifyListeners();
     return true;
   }
@@ -299,6 +351,7 @@ class GameController extends ChangeNotifier {
     h.coinsAccumulated = 0;
     h.readyToCollect = false;
     h.lastCollectTime = DateTime.now().millisecondsSinceEpoch;
+    SoundManager.instance.playCollectCoins();
     notifyListeners();
     return true;
   }
@@ -328,6 +381,7 @@ class GameController extends ChangeNotifier {
     h.bakingStartedAt = null;
     h.bakingEndsAt = null;
 
+    SoundManager.instance.playCollectKibble();
     notifyListeners();
     return true;
   }
@@ -337,7 +391,10 @@ class GameController extends ChangeNotifier {
   }
 
   bool placeHabitat(HabitatCatalogItem item, int col, int row) {
-    if (!canAfford(item.costCoins, item.costCrystals)) return false;
+    if (!canAfford(item.costCoins, item.costCrystals)) {
+      SoundManager.instance.playSadWhimper();
+      return false;
+    }
 
     _coins -= item.costCoins;
     _crystals -= item.costCrystals;
@@ -345,7 +402,7 @@ class GameController extends ChangeNotifier {
 
     final now = DateTime.now().millisecondsSinceEpoch;
     final newHab = HabitatModel(
-      id: 'hab_${now}',
+      id: 'hab_$now',
       type: item.type,
       habitatId: item.id,
       name: item.name,
@@ -362,6 +419,7 @@ class GameController extends ChangeNotifier {
 
     _placedHabitats.add(newHab);
     _selectedHabitatId = newHab.id;
+    SoundManager.instance.playBuild();
     notifyListeners();
     return true;
   }
@@ -374,6 +432,7 @@ class GameController extends ChangeNotifier {
         break;
       }
     }
+    SoundManager.instance.playBuild();
     notifyListeners();
   }
 
@@ -383,6 +442,7 @@ class GameController extends ChangeNotifier {
         h.underConstruction = false;
         h.constructionEndsAt = null;
         _addXp(50);
+        SoundManager.instance.playLevelUp();
         notifyListeners();
         break;
       }
@@ -390,7 +450,10 @@ class GameController extends ChangeNotifier {
   }
 
   bool adoptDog(DogCatalogItem dogItem, String targetHabitatId) {
-    if (!canAfford(dogItem.costCoins, dogItem.costCrystals)) return false;
+    if (!canAfford(dogItem.costCoins, dogItem.costCrystals)) {
+      SoundManager.instance.playSadWhimper();
+      return false;
+    }
 
     final hab = _placedHabitats.firstWhere((h) => h.id == targetHabitatId,
         orElse: () => HabitatModel(id: '', habitatId: '', name: '', col: 0, row: 0));
@@ -413,6 +476,8 @@ class GameController extends ChangeNotifier {
     );
 
     hab.dogs.add(newDog);
+    SoundManager.instance.playLevelUp();
+    SoundManager.instance.playDogBark(isPuppy: true, force: true);
     notifyListeners();
     return true;
   }
@@ -426,11 +491,15 @@ class GameController extends ChangeNotifier {
         for (final d in h.dogs) {
           if (d.id == dogId) {
             final info = DogStageInfo.getInfo(d);
-            if (_kibble < info.kibbleCostPerFeed) return false;
+            if (_kibble < info.kibbleCostPerFeed) {
+              SoundManager.instance.playSadWhimper();
+              return false;
+            }
 
             _kibble -= info.kibbleCostPerFeed;
             _coins += info.coinsRewardPerFeed;
             _addXp(info.xpRewardPerFeed);
+            SoundManager.instance.playFeed();
 
             d.feedProgress += 1;
             if (d.feedProgress >= 4) {
@@ -442,6 +511,8 @@ class GameController extends ChangeNotifier {
               } else if (d.level >= 4) {
                 d.stage = 'Young';
               }
+              SoundManager.instance.playLevelUp();
+              SoundManager.instance.playDogBark(isPuppy: d.stage == 'Puppy', force: true);
             }
             notifyListeners();
             return true;
@@ -458,6 +529,7 @@ class GameController extends ChangeNotifier {
         for (final d in h.dogs) {
           if (d.id == dogId) {
             d.name = newName.trim();
+            SoundManager.instance.playClick();
             notifyListeners();
             return;
           }
@@ -473,6 +545,7 @@ class GameController extends ChangeNotifier {
         h.dogs.removeWhere((d) => d.id == dogId);
         if (h.dogs.length < initialLen) {
           _coins += refundCoins;
+          SoundManager.instance.playSadWhimper();
           notifyListeners();
           return true;
         }
@@ -502,6 +575,8 @@ class GameController extends ChangeNotifier {
     dog.habitatName = toHab.name;
     toHab.dogs.add(dog);
 
+    SoundManager.instance.playLevelUp();
+    SoundManager.instance.playDogBark(isPuppy: dog.isPuppy);
     notifyListeners();
     return true;
   }
@@ -525,6 +600,8 @@ class GameController extends ChangeNotifier {
         _addXp(10);
         break;
     }
+    SoundManager.instance.playPet();
+    SoundManager.instance.playDogBark(isPuppy: true);
     notifyListeners();
   }
 
@@ -535,6 +612,7 @@ class GameController extends ChangeNotifier {
         _coins += t.rewardCoins;
         _crystals += t.rewardCrystals;
         _addXp(t.rewardXp);
+        SoundManager.instance.playQuestReward();
         notifyListeners();
         return;
       }
@@ -572,6 +650,7 @@ class GameController extends ChangeNotifier {
       // Level up rewards
       _crystals += 5;
       _coins += 500;
+      SoundManager.instance.playLevelUp();
     }
   }
 

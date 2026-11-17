@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../services/audio_service.dart';
 
 class GenericModal extends StatelessWidget {
   final String title;
@@ -103,9 +104,13 @@ class GenericModal extends StatelessWidget {
                 height: modalW * 0.09,
                 child: MouseRegion(
                   cursor: SystemMouseCursors.click,
+                  onEnter: (_) => SoundManager.instance.playHover(),
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
-                    onTap: onClose,
+                    onTap: () {
+                      SoundManager.instance.playClick();
+                      onClose();
+                    },
                     child: Container(
                       decoration: const BoxDecoration(
                         shape: BoxShape.circle,
@@ -118,10 +123,10 @@ class GenericModal extends StatelessWidget {
 
               // Inner content area inside the parchment frame — bounded for ListViews and scrolls
               Positioned(
-                left: modalW * 0.145,
-                right: modalW * 0.145,
-                top: modalH * 0.235,
-                bottom: modalH * 0.085,
+                left: modalW * 0.12,
+                right: modalW * 0.12,
+                top: modalH * 0.225,
+                bottom: modalH * 0.12,
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(16),
                   child: Padding(

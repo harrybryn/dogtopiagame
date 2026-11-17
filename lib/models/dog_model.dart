@@ -11,6 +11,10 @@ class DogModel {
   String habitatName;
   final int adoptedAt;
 
+  bool get isPuppy => stage == 'Puppy';
+  bool get isYoung => stage == 'Young';
+  bool get isAdult => stage == 'Adult';
+
   DogModel({
     required this.id,
     required this.breedId,

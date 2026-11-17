@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'state/game_controller.dart';
+import 'services/audio_service.dart';
 import 'components/common/loading_screen.dart';
 import 'pages/world_view_page.dart';
 import 'pages/habitat_care_page.dart';
@@ -49,7 +50,18 @@ class _DogtopiaRootState extends State<DogtopiaRoot> {
   String _currentRoute = 'world';
   Map<String, dynamic> _routeArgs = {};
 
+  @override
+  void initState() {
+    super.initState();
+    SoundManager.instance.init().then((_) {
+      if (_game.bgmEnabled) {
+        SoundManager.instance.startBgm();
+      }
+    });
+  }
+
   void _navigateTo(String route, {Map<String, dynamic>? args}) {
+    SoundManager.instance.playClick();
     setState(() {
       _currentRoute = route;
       _routeArgs = args ?? {};
@@ -58,6 +70,7 @@ class _DogtopiaRootState extends State<DogtopiaRoot> {
 
   @override
   void dispose() {
+    SoundManager.instance.dispose();
     _game.dispose();
     super.dispose();
   }
@@ -71,7 +84,12 @@ class _DogtopiaRootState extends State<DogtopiaRoot> {
           return LoadingScreen(
             duration: const Duration(milliseconds: 2600),
             onFinish: () {
-              if (mounted) setState(() => _isLoading = false);
+              if (mounted) {
+                setState(() => _isLoading = false);
+                if (_game.bgmEnabled) {
+                  SoundManager.instance.startBgm();
+                }
+              }
             },
           );
         }
