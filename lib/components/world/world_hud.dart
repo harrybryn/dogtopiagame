@@ -4,10 +4,11 @@ import '../../models/habitat_model.dart';
 import '../../models/dog_model.dart';
 import '../../models/dog_evolution.dart';
 import '../common/hover_scale.dart';
-import '../../pages/dog_factory_inside_page.dart';
+import '../../models/walkthrough_step.dart';
 
 class WorldHUD extends StatelessWidget {
   final GameController game;
+  final Map<String, GlobalKey>? walkthroughKeys;
   final VoidCallback onOpenBuild;
   final VoidCallback onOpenGoals;
   final VoidCallback onOpenProgress;
@@ -24,6 +25,7 @@ class WorldHUD extends StatelessWidget {
   const WorldHUD({
     super.key,
     required this.game,
+    this.walkthroughKeys,
     required this.onOpenBuild,
     required this.onOpenGoals,
     required this.onOpenProgress,
@@ -191,6 +193,7 @@ class WorldHUD extends StatelessWidget {
 
               // ── 2. Top-Right Resources Row (Enlarged with Hover Effects) ──
               Row(
+                key: walkthroughKeys?[WalkthroughTargets.hudResources],
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   // Star Crystals (Diamonds)
@@ -277,6 +280,7 @@ class WorldHUD extends StatelessWidget {
           bottom: 16,
           right: 16,
           child: HoverScale(
+            key: walkthroughKeys?[WalkthroughTargets.hudBuild],
             scale: 1.08,
             onTap: onOpenBuild,
             tooltip: 'Open Habitat & Building Store',
@@ -749,23 +753,13 @@ class WorldHUD extends StatelessWidget {
                       children: [
                         // MAKE FOOD (factory) or COLLECT (habitat) Button
                         HoverScale(
+                          key: isFactory
+                              ? (walkthroughKeys?[WalkthroughTargets.hudMakeFood])
+                              : null,
                           scale: 1.08,
                           onTap: () {
                             if (isFactory) {
-                              // Open the DogFoodFactory inside page as a full-screen dialog
-                              showDialog(
-                                context: context,
-                                barrierDismissible: false,
-                                barrierColor: Colors.black87,
-                                builder: (ctx) => Dialog.fullscreen(
-                                  backgroundColor: Colors.transparent,
-                                  child: DogFactoryInsidePage(
-                                    game: game,
-                                    habitat: hab,
-                                    onBackToWorld: () => Navigator.of(ctx).pop(),
-                                  ),
-                                ),
-                              );
+                              onOpenHabitatCare(hab);
                             } else {
                               if (hab.coinsAccumulated > 0) {
                                 game.collectCoins(hab.id);
@@ -1042,6 +1036,9 @@ class WorldHUD extends StatelessWidget {
     final dogName = dog.name.trim().isEmpty ? 'Bulldog' : dog.name;
 
     return HoverScale(
+      key: dogIndex == 0
+          ? (walkthroughKeys?[WalkthroughTargets.hudCareDog])
+          : null,
       scale: 1.08,
       onTap: () => onOpenHabitatCare(hab, dogIndex),
       child: Column(

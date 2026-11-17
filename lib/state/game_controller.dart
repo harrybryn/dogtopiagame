@@ -8,6 +8,7 @@ import '../models/habitat_catalog.dart';
 import '../models/dog_evolution.dart';
 import '../models/obstacle_model.dart';
 import '../models/food_recipe_model.dart';
+import '../models/walkthrough_step.dart';
 import '../services/audio_service.dart';
 
 class GameController extends ChangeNotifier {
@@ -50,7 +51,13 @@ class GameController extends ChangeNotifier {
 
   Timer? _incomeTimer;
 
-  GameController() {
+  // Interactive Dog Wizard walkthrough state
+  bool _walkthroughActive = true;
+  int _walkthroughStepIndex = 0;
+  bool _walkthroughRewardClaimed = false;
+
+  GameController({bool startWalkthrough = true}) {
+    _walkthroughActive = startWalkthrough;
     SoundManager.instance.setBgmEnabled(_bgmEnabled);
     SoundManager.instance.setSfxEnabled(_sfxEnabled);
     SoundManager.instance.setBgmVolume(_bgmVolume);
@@ -78,6 +85,145 @@ class GameController extends ChangeNotifier {
   bool get isLotExpansionUnlocked => _isLot1Unlocked && _isLot2Unlocked;
   List<ObstacleModel> get obstacles => _obstacles;
   String? get selectedObstacleId => _selectedObstacleId;
+
+  bool get walkthroughActive => _walkthroughActive;
+  int get walkthroughStepIndex => _walkthroughStepIndex;
+  int get walkthroughTotalSteps => WalkthroughStep.steps.length;
+  bool get walkthroughRewardClaimed => _walkthroughRewardClaimed;
+
+  WalkthroughStep? get currentWalkthroughStep {
+    if (!_walkthroughActive) return null;
+    if (_walkthroughStepIndex < 0 ||
+        _walkthroughStepIndex >= WalkthroughStep.steps.length) {
+      return null;
+    }
+    return WalkthroughStep.steps[_walkthroughStepIndex];
+  }
+
+  /// Prevents softlocks during tutorial replay (e.g. factory already baking or out of kibble).
+  bool get canBypassCurrentWalkthroughStep {
+    final step = currentWalkthroughStep;
+    if (step == null || !step.requireAction) return true;
+    switch (step.id) {
+      case WalkthroughStepId.selectGarden:
+        return !_placedHabitats.any((h) => h.id == 'hab_starter_garden');
+      case WalkthroughStepId.enterHabitatCare:
+        final garden = _placedHabitats.firstWhere(
+          (h) => h.id == 'hab_starter_garden',
+          orElse: () => HabitatModel(id: '', habitatId: '', name: '', col: 0, row: 0),
+        );
+        return garden.id.isEmpty || garden.dogs.isEmpty;
+      case WalkthroughStepId.feedDog:
+        final garden = _placedHabitats.firstWhere(
+          (h) => h.id == 'hab_starter_garden',
+          orElse: () => HabitatModel(id: '', habitatId: '', name: '', col: 0, row: 0),
+        );
+        if (garden.id.isEmpty || garden.dogs.isEmpty) return true;
+        final nextCost = DogStageInfo.getInfo(garden.dogs.first).kibbleCostPerFeed;
+        return _kibble < nextCost;
+      case WalkthroughStepId.selectFactory:
+        return !_placedHabitats.any((h) => h.id == 'hab_starter_factory');
+      case WalkthroughStepId.bakeRecipe:
+        final factory = _placedHabitats.firstWhere(
+          (h) => h.id == 'hab_starter_factory',
+          orElse: () => HabitatModel(id: '', habitatId: '', name: '', col: 0, row: 0),
+        );
+        return factory.id.isEmpty || factory.isBaking || _coins < 50;
+      case WalkthroughStepId.speedUpBaking:
+        final factory = _placedHabitats.firstWhere(
+          (h) => h.id == 'hab_starter_factory',
+          orElse: () => HabitatModel(id: '', habitatId: '', name: '', col: 0, row: 0),
+        );
+        return factory.id.isEmpty || !factory.isBaking || _crystals < 1;
+      case WalkthroughStepId.collectKibble:
+        final factory = _placedHabitats.firstWhere(
+          (h) => h.id == 'hab_starter_factory',
+          orElse: () => HabitatModel(id: '', habitatId: '', name: '', col: 0, row: 0),
+        );
+        return factory.id.isEmpty || !factory.readyToCollectDogfood;
+      default:
+        return false;
+    }
+  }
+
+  void advanceWalkthrough() {
+    if (!_walkthroughActive) return;
+    final current = currentWalkthroughStep;
+    if (current == null) {
+      _walkthroughActive = false;
+      notifyListeners();
+      return;
+    }
+
+    if (current.id == WalkthroughStepId.graduation) {
+      _completeWalkthrough(grantReward: true);
+      return;
+    }
+
+    if (_walkthroughStepIndex + 1 >= WalkthroughStep.steps.length) {
+      _completeWalkthrough(grantReward: true);
+      return;
+    }
+
+    _walkthroughStepIndex += 1;
+    SoundManager.instance.playWalkthroughStepComplete();
+    notifyListeners();
+  }
+
+  void skipWalkthrough() {
+    if (!_walkthroughActive) return;
+    _walkthroughActive = false;
+    SoundManager.instance.playClick();
+    notifyListeners();
+  }
+
+  void restartWalkthrough() {
+    _selectedHabitatId = null;
+    _selectedObstacleId = null;
+    _walkthroughStepIndex = 0;
+    _walkthroughActive = true;
+    SoundManager.instance.playWalkthroughPop();
+    notifyListeners();
+  }
+
+  void _completeWalkthrough({required bool grantReward}) {
+    _walkthroughActive = false;
+    if (grantReward && !_walkthroughRewardClaimed) {
+      _walkthroughRewardClaimed = true;
+      _coins += 500;
+      _crystals += 5;
+      _addXp(100);
+      SoundManager.instance.playQuestReward();
+    } else {
+      SoundManager.instance.playClick();
+    }
+    notifyListeners();
+  }
+
+  void onWalkthroughRouteChanged(String route) {
+    final step = currentWalkthroughStep;
+    if (step == null) return;
+
+    if (step.id == WalkthroughStepId.enterHabitatCare && route == 'habitat') {
+      _walkthroughStepIndex += 1;
+      SoundManager.instance.playWalkthroughStepComplete();
+      notifyListeners();
+    } else if (step.id == WalkthroughStepId.backFromHabitat && route == 'world') {
+      _selectedHabitatId = null;
+      _walkthroughStepIndex += 1;
+      SoundManager.instance.playWalkthroughStepComplete();
+      notifyListeners();
+    } else if (step.id == WalkthroughStepId.enterFactory && route == 'factory') {
+      _walkthroughStepIndex += 1;
+      SoundManager.instance.playWalkthroughStepComplete();
+      notifyListeners();
+    } else if (step.id == WalkthroughStepId.backFromFactory && route == 'world') {
+      _selectedHabitatId = null;
+      _walkthroughStepIndex += 1;
+      SoundManager.instance.playWalkthroughStepComplete();
+      notifyListeners();
+    }
+  }
 
   bool isTileUnlocked(int col, int row) {
     if (row >= 11) return true; // Entire bottom strip always unlocked (starter + south expansion)
@@ -210,6 +356,15 @@ class GameController extends ChangeNotifier {
     if (id != null) {
       _selectedObstacleId = null;
       SoundManager.instance.playClick();
+      final step = currentWalkthroughStep;
+      if (step != null &&
+          ((step.id == WalkthroughStepId.selectGarden &&
+                  id == 'hab_starter_garden') ||
+              (step.id == WalkthroughStepId.selectFactory &&
+                  id == 'hab_starter_factory'))) {
+        _walkthroughStepIndex += 1;
+        SoundManager.instance.playWalkthroughStepComplete();
+      }
     }
     notifyListeners();
   }
@@ -316,6 +471,10 @@ class GameController extends ChangeNotifier {
     h.dogfoodAccumulated = 0;
 
     SoundManager.instance.playBake();
+    if (currentWalkthroughStep?.id == WalkthroughStepId.bakeRecipe) {
+      _walkthroughStepIndex += 1;
+      SoundManager.instance.playWalkthroughStepComplete();
+    }
     notifyListeners();
     return true;
   }
@@ -338,6 +497,10 @@ class GameController extends ChangeNotifier {
     h.readyToCollectDogfood = true;
 
     SoundManager.instance.playLevelUp();
+    if (currentWalkthroughStep?.id == WalkthroughStepId.speedUpBaking) {
+      _walkthroughStepIndex += 1;
+      SoundManager.instance.playWalkthroughStepComplete();
+    }
     notifyListeners();
     return true;
   }
@@ -382,6 +545,10 @@ class GameController extends ChangeNotifier {
     h.bakingEndsAt = null;
 
     SoundManager.instance.playCollectKibble();
+    if (currentWalkthroughStep?.id == WalkthroughStepId.collectKibble) {
+      _walkthroughStepIndex += 1;
+      SoundManager.instance.playWalkthroughStepComplete();
+    }
     notifyListeners();
     return true;
   }
@@ -513,6 +680,13 @@ class GameController extends ChangeNotifier {
               }
               SoundManager.instance.playLevelUp();
               SoundManager.instance.playDogBark(isPuppy: d.stage == 'Puppy', force: true);
+            }
+            if (currentWalkthroughStep?.id == WalkthroughStepId.feedDog) {
+              final nextCost = DogStageInfo.getInfo(d).kibbleCostPerFeed;
+              if (_kibble < nextCost) {
+                _walkthroughStepIndex += 1;
+                SoundManager.instance.playWalkthroughStepComplete();
+              }
             }
             notifyListeners();
             return true;

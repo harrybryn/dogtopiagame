@@ -4,6 +4,7 @@ import '../models/habitat_model.dart';
 import '../models/dog_model.dart';
 import '../models/dog_evolution.dart';
 import '../models/habitat_catalog.dart';
+import '../models/walkthrough_step.dart';
 import '../components/common/hover_scale.dart';
 import '../services/audio_service.dart';
 
@@ -13,6 +14,7 @@ class HabitatCarePage extends StatefulWidget {
   final VoidCallback onBackToWorld;
   final Function(DogModel dog, String fromHabitatId)? onStartTransferDog;
   final int initialDogIndex;
+  final Map<String, GlobalKey>? walkthroughKeys;
 
   const HabitatCarePage({
     super.key,
@@ -21,6 +23,7 @@ class HabitatCarePage extends StatefulWidget {
     required this.onBackToWorld,
     this.onStartTransferDog,
     this.initialDogIndex = 0,
+    this.walkthroughKeys,
   });
 
   @override
@@ -270,6 +273,7 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
             top: 14,
             left: 20,
             child: HoverScale(
+              key: widget.walkthroughKeys?[WalkthroughTargets.careBackButton],
               scale: 1.06,
               onTap: widget.onBackToWorld,
               child: Container(
@@ -428,9 +432,13 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
                             ),
                           ),
                         )
-                      : Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
+                      : Center(
+                          child: Column(
+                            key: widget.walkthroughKeys?[
+                                WalkthroughTargets.careDogStation],
+                            mainAxisSize: MainAxisSize.min,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
                             // 1. Dog Name Plaque with Edit Pencil & Level Pill + Left/Right arrows
                             Row(
                               mainAxisSize: MainAxisSize.min,
@@ -734,6 +742,8 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
 
                             // 4. Dual Action Feed Buttons (FEED & FEED x4)
                             SizedBox(
+                              key: widget.walkthroughKeys?[
+                                  WalkthroughTargets.careFeedButton],
                               width: 280,
                               child: Row(
                                 children: [
@@ -876,6 +886,7 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
                               ),
                             ),
                           ],
+                          ),
                         ),
                 ),
 

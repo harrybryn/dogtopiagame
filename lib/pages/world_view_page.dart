@@ -23,12 +23,16 @@ class WorldViewPage extends StatefulWidget {
   final GameController game;
   final Function(String route, {Map<String, dynamic>? args}) onNavigate;
   final Map<String, dynamic>? initialArgs;
+  final Map<String, GlobalKey>? walkthroughKeys;
+  final ValueNotifier<Rect?>? worldTargetRectNotifier;
 
   const WorldViewPage({
     super.key,
     required this.game,
     required this.onNavigate,
     this.initialArgs,
+    this.walkthroughKeys,
+    this.worldTargetRectNotifier,
   });
 
   @override
@@ -54,6 +58,7 @@ class _WorldViewPageState extends State<WorldViewPage> {
   DogModel? _transferringDog;
   String? _transferFromHabitatId;
   String? _hudToast;
+  String? _lastWalkthroughCenteredHabId;
 
   @override
   void initState() {
@@ -216,12 +221,76 @@ class _WorldViewPageState extends State<WorldViewPage> {
           final maxPanX = max(0.0, (scaledW - W) / 2);
           final maxPanY = max(0.0, (scaledH - H) / 2);
 
+          // Auto-center camera on targeted walkthrough building when step activates
+          final wtTargetHabId =
+              widget.game.currentWalkthroughStep?.worldTargetHabitatId;
+          HabitatModel? wtTargetHab;
+          if (wtTargetHabId != null) {
+            for (final h in widget.game.placedHabitats) {
+              if (h.id == wtTargetHabId) {
+                wtTargetHab = h;
+                break;
+              }
+            }
+          }
+
+          if (wtTargetHab != null &&
+              _lastWalkthroughCenteredHabId != wtTargetHab.id) {
+            _lastWalkthroughCenteredHabId = wtTargetHab.id;
+            final corners = getHabitatCorners(
+              wtTargetHab.col,
+              wtTargetHab.row,
+              wtTargetHab.sizeW,
+              wtTargetHab.sizeH,
+            );
+            _camX = (scaledW / 2) - corners.center.dx * totalScale;
+            _camY = (H * 0.44 - (corners.center.dy - 24.0) * totalScale) -
+                (H - scaledH) / 2;
+          } else if (wtTargetHabId == null &&
+              _lastWalkthroughCenteredHabId != null) {
+            _lastWalkthroughCenteredHabId = null;
+          }
+
           // Clamped camera offsets
           _camX = _camX.clamp(-maxPanX, maxPanX);
           _camY = _camY.clamp(-maxPanY, maxPanY);
 
           final leftPos = (W - scaledW) / 2 + _camX;
           final topPos = (H - scaledH) / 2 + _camY;
+
+          // Sync projected screen rect of targeted building to WalkthroughOverlay
+          if (widget.worldTargetRectNotifier != null) {
+            Rect? projectedRect;
+            if (wtTargetHab != null) {
+              final corners = getHabitatCorners(
+                wtTargetHab.col,
+                wtTargetHab.row,
+                wtTargetHab.sizeW,
+                wtTargetHab.sizeH,
+              );
+              projectedRect = Rect.fromLTRB(
+                leftPos + corners.pLeft.dx * totalScale,
+                topPos + (corners.pTop.dy - 24.0) * totalScale,
+                leftPos + corners.pRight.dx * totalScale,
+                topPos + (corners.pBottom.dy + 10.0) * totalScale,
+              );
+            }
+            final prev = widget.worldTargetRectNotifier!.value;
+            final changed = (prev == null) != (projectedRect == null) ||
+                (prev != null &&
+                    projectedRect != null &&
+                    ((prev.left - projectedRect.left).abs() > 0.5 ||
+                        (prev.top - projectedRect.top).abs() > 0.5 ||
+                        (prev.width - projectedRect.width).abs() > 0.5 ||
+                        (prev.height - projectedRect.height).abs() > 0.5));
+            if (changed) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) {
+                  widget.worldTargetRectNotifier!.value = projectedRect;
+                }
+              });
+            }
+          }
 
           return Stack(
             fit: StackFit.expand,
@@ -350,6 +419,7 @@ class _WorldViewPageState extends State<WorldViewPage> {
               if (!isPlacing && !isSelectingHabitat)
                 WorldHUD(
                   game: widget.game,
+                  walkthroughKeys: widget.walkthroughKeys,
                   onOpenBuild: () {
                     showDialog(
                       context: context,

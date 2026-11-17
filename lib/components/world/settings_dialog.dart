@@ -81,6 +81,10 @@ class _SettingsDialogState extends State<SettingsDialog> {
               onVolumeChanged: (_) {},
               accentColor: const Color(0xFFD97706),
             ),
+            const SizedBox(height: 8),
+
+            // ── 4. Dog Wizard Tutorial Replay Card ──
+            _buildReplayTutorialCard(),
             const SizedBox(height: 10),
 
             // ── Version Footnote ──
@@ -95,6 +99,88 @@ class _SettingsDialogState extends State<SettingsDialog> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildReplayTutorialCard() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFFFFFFFF), Color(0xFFFFFBF2), Color(0xFFFAECD5)],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFD97706), width: 1.8),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x1478350F),
+            offset: Offset(0, 2),
+            blurRadius: 4,
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Image.asset(
+                'assets/ui/DogWizard.png',
+                width: 26,
+                height: 26,
+                fit: BoxFit.contain,
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'Dog Wizard Tutorial',
+                style: TextStyle(
+                  color: Color(0xFF3B1404),
+                  fontFamily: 'Lilita One',
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+          HoverScale(
+            scale: 1.06,
+            onTap: () {
+              Navigator.of(context).pop();
+              widget.game.restartWalkthrough();
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF0F766E), Color(0xFF115E59)],
+                ),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFFBBF24), width: 1.2),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x20000000),
+                    offset: Offset(0, 1.5),
+                    blurRadius: 2,
+                  ),
+                ],
+              ),
+              child: const Text(
+                'REPLAY',
+                style: TextStyle(
+                  color: Color(0xFFFEF08A),
+                  fontFamily: 'Lilita One',
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

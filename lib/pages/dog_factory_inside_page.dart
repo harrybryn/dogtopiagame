@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import '../models/habitat_model.dart';
 import '../models/food_recipe_model.dart';
+import '../models/walkthrough_step.dart';
 import '../state/game_controller.dart';
 import '../components/common/hover_scale.dart';
 
@@ -10,12 +11,14 @@ class DogFactoryInsidePage extends StatefulWidget {
   final GameController game;
   final HabitatModel habitat;
   final VoidCallback onBackToWorld;
+  final Map<String, GlobalKey>? walkthroughKeys;
 
   const DogFactoryInsidePage({
     super.key,
     required this.game,
     required this.habitat,
     required this.onBackToWorld,
+    this.walkthroughKeys,
   });
 
   @override
@@ -212,6 +215,7 @@ class _DogFactoryInsidePageState extends State<DogFactoryInsidePage> {
             top: 14,
             left: 20,
             child: HoverScale(
+              key: widget.walkthroughKeys?[WalkthroughTargets.factoryBackButton],
               scale: 1.06,
               onTap: widget.onBackToWorld,
               child: Container(
@@ -603,6 +607,7 @@ class _DogFactoryInsidePageState extends State<DogFactoryInsidePage> {
           ),
           const SizedBox(height: 24),
           HoverScale(
+            key: widget.walkthroughKeys?[WalkthroughTargets.factoryCollectButton],
             scale: 1.06,
             onTap: _onCollect,
             child: Container(
@@ -834,6 +839,7 @@ class _DogFactoryInsidePageState extends State<DogFactoryInsidePage> {
 
           // Speed-Up Button
           HoverScale(
+            key: widget.walkthroughKeys?[WalkthroughTargets.factorySpeedUpButton],
             scale: 1.06,
             onTap: _onSpeedUp,
             child: Container(
@@ -982,7 +988,8 @@ class _DogFactoryInsidePageState extends State<DogFactoryInsidePage> {
                 ),
                 itemBuilder: (context, idx) {
                   final recipe = FoodRecipeModel.recipes[idx];
-                  return _buildRecipeCard(recipe, hab, isBaking);
+                  return _buildRecipeCard(recipe, hab, isBaking,
+                      isFirstRecipe: idx == 0);
                 },
               );
             },
@@ -993,7 +1000,8 @@ class _DogFactoryInsidePageState extends State<DogFactoryInsidePage> {
   }
 
   Widget _buildRecipeCard(
-      FoodRecipeModel recipe, HabitatModel hab, bool isBaking) {
+      FoodRecipeModel recipe, HabitatModel hab, bool isBaking,
+      {bool isFirstRecipe = false}) {
     final canAfford = widget.game.coins >= recipe.costCoins;
     final isBakeBlocked = isBaking;
 
@@ -1170,6 +1178,9 @@ class _DogFactoryInsidePageState extends State<DogFactoryInsidePage> {
 
           // Bottom Action: Make Food / Bake Button with Cost
           HoverScale(
+            key: isFirstRecipe
+                ? (widget.walkthroughKeys?[WalkthroughTargets.factoryBakeButton])
+                : null,
             scale: canAfford && !isBakeBlocked ? 1.04 : 1.0,
             onTap: () {
               if (isBakeBlocked) {

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'state/game_controller.dart';
 import 'services/audio_service.dart';
 import 'components/common/loading_screen.dart';
+import 'components/common/walkthrough_overlay.dart';
+import 'models/walkthrough_step.dart';
 import 'pages/world_view_page.dart';
 import 'pages/habitat_care_page.dart';
 import 'pages/dog_factory_inside_page.dart';
@@ -46,6 +48,21 @@ class DogtopiaRoot extends StatefulWidget {
 
 class _DogtopiaRootState extends State<DogtopiaRoot> {
   final GameController _game = GameController();
+  final ValueNotifier<Rect?> _walkthroughWorldTargetRect =
+      ValueNotifier<Rect?>(null);
+  final Map<String, GlobalKey> _walkthroughKeys = {
+    WalkthroughTargets.hudResources: GlobalKey(),
+    WalkthroughTargets.hudCareDog: GlobalKey(),
+    WalkthroughTargets.hudMakeFood: GlobalKey(),
+    WalkthroughTargets.hudBuild: GlobalKey(),
+    WalkthroughTargets.careDogStation: GlobalKey(),
+    WalkthroughTargets.careFeedButton: GlobalKey(),
+    WalkthroughTargets.careBackButton: GlobalKey(),
+    WalkthroughTargets.factoryBakeButton: GlobalKey(),
+    WalkthroughTargets.factorySpeedUpButton: GlobalKey(),
+    WalkthroughTargets.factoryCollectButton: GlobalKey(),
+    WalkthroughTargets.factoryBackButton: GlobalKey(),
+  };
   bool _isLoading = true;
   String _currentRoute = 'world';
   Map<String, dynamic> _routeArgs = {};
@@ -66,10 +83,12 @@ class _DogtopiaRootState extends State<DogtopiaRoot> {
       _currentRoute = route;
       _routeArgs = args ?? {};
     });
+    _game.onWalkthroughRouteChanged(route);
   }
 
   @override
   void dispose() {
+    _walkthroughWorldTargetRect.dispose();
     SoundManager.instance.dispose();
     _game.dispose();
     super.dispose();
@@ -94,65 +113,95 @@ class _DogtopiaRootState extends State<DogtopiaRoot> {
                   if (_game.bgmEnabled) {
                     SoundManager.instance.startBgm();
                   }
+                  if (_game.walkthroughActive) {
+                    SoundManager.instance.playWalkthroughPop();
+                  }
                 }
               },
             );
           }
 
+          Widget activePage;
           switch (_currentRoute) {
             case 'factory':
               final habitat = _routeArgs['habitat'] as HabitatModel? ??
                   _game.placedHabitats.firstWhere((h) => h.isFactory,
                       orElse: () => HabitatModel.createDefaultDogfoodFactory());
-              return DogFactoryInsidePage(
+              activePage = DogFactoryInsidePage(
                 game: _game,
                 habitat: habitat,
                 onBackToWorld: () => _navigateTo('world'),
+                walkthroughKeys: _walkthroughKeys,
               );
+              break;
 
             case 'habitat':
               final habitat = _routeArgs['habitat'] as HabitatModel? ??
                   _game.placedHabitats.first;
               final initialDogIndex = _routeArgs['initialDogIndex'] as int? ?? 0;
               if (habitat.isFactory) {
-                return DogFactoryInsidePage(
+                activePage = DogFactoryInsidePage(
                   game: _game,
                   habitat: habitat,
                   onBackToWorld: () => _navigateTo('world'),
+                  walkthroughKeys: _walkthroughKeys,
+                );
+              } else {
+                activePage = HabitatCarePage(
+                  game: _game,
+                  habitat: habitat,
+                  initialDogIndex: initialDogIndex,
+                  onBackToWorld: () => _navigateTo('world'),
+                  onStartTransferDog: (dog, fromHabId) {
+                    _navigateTo('world', args: {
+                      'transferDog': dog,
+                      'fromHabitatId': fromHabId,
+                    });
+                  },
+                  walkthroughKeys: _walkthroughKeys,
                 );
               }
-              return HabitatCarePage(
-                game: _game,
-                habitat: habitat,
-                initialDogIndex: initialDogIndex,
-                onBackToWorld: () => _navigateTo('world'),
-                onStartTransferDog: (dog, fromHabId) {
-                  _navigateTo('world', args: {
-                    'transferDog': dog,
-                    'fromHabitatId': fromHabId,
-                  });
-                },
-              );
+              break;
 
             case 'breeding':
-              return BreedingPage(
+              activePage = BreedingPage(
                 game: _game,
                 onBackToWorld: () => _navigateTo('world'),
               );
+              break;
 
             case 'collection':
-              return CollectionBookPage(
+              activePage = CollectionBookPage(
                 onBackToWorld: () => _navigateTo('world'),
               );
+              break;
 
             case 'world':
             default:
-              return WorldViewPage(
+              activePage = WorldViewPage(
                 game: _game,
                 onNavigate: _navigateTo,
                 initialArgs: _routeArgs,
+                walkthroughKeys: _walkthroughKeys,
+                worldTargetRectNotifier: _walkthroughWorldTargetRect,
               );
+              break;
           }
+
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              activePage,
+              if (_game.walkthroughActive)
+                WalkthroughOverlay(
+                  game: _game,
+                  currentRoute: _currentRoute,
+                  targetKeys: _walkthroughKeys,
+                  worldTargetRectNotifier: _walkthroughWorldTargetRect,
+                  onReturnToWorld: () => _navigateTo('world'),
+                ),
+            ],
+          );
         },
       ),
     );

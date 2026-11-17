@@ -198,6 +198,16 @@ class SoundManager {
     _playFile(_voicePlayer, 'sounds/sad_whimper.wav', volume: 0.6);
   }
 
+  void playWalkthroughPop() {
+    if (!sfxEnabled) return;
+    _playFile(_voicePlayer, 'sounds/puppy_alert.wav', volume: 0.65);
+  }
+
+  void playWalkthroughStepComplete() {
+    if (!sfxEnabled) return;
+    _playFile(_voicePlayer, 'sounds/puppy_happy.wav', volume: 0.7);
+  }
+
   void playDogBark({bool isPuppy = false, bool force = false}) {
     if (!sfxEnabled) return;
     final now = DateTime.now().millisecondsSinceEpoch;
