@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:audioplayers/audioplayers.dart';
 
 class SoundManager {
@@ -39,7 +40,15 @@ class SoundManager {
       await _voicePlayer.setReleaseMode(ReleaseMode.stop);
       await _voicePlayer.setVolume(0.65 * sfxVolume);
     } catch (e) {
-      // Audio initialization fallback
+      debugPrint('SoundManager init error: $e');
+    }
+  }
+
+  /// Called on user interaction (e.g., tap/click anywhere on screen)
+  /// to unlock Chrome/browser autoplay restrictions and start BGM if pending.
+  void handleUserInteraction() {
+    if (bgmEnabled && !_isBgmPlaying) {
+      startBgm();
     }
   }
 
@@ -58,21 +67,28 @@ class SoundManager {
         );
         _isBgmPlaying = true;
       }
-    } catch (_) {}
+    } catch (e) {
+      _isBgmPlaying = false;
+      debugPrint('SoundManager BGM autoplay error (waiting for user click): $e');
+    }
   }
 
   Future<void> stopBgm() async {
     try {
       await _bgmPlayer.stop();
       _isBgmPlaying = false;
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('SoundManager stopBgm error: $e');
+    }
   }
 
   Future<void> pauseBgm() async {
     try {
       await _bgmPlayer.pause();
       _isBgmPlaying = false;
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('SoundManager pauseBgm error: $e');
+    }
   }
 
   Future<void> resumeBgm() async {
@@ -202,7 +218,6 @@ class SoundManager {
 
   Future<void> _playFile(AudioPlayer player, String assetPath, {double volume = 1.0}) async {
     try {
-      await player.stop();
       await player.setVolume((volume * sfxVolume).clamp(0.0, 1.0));
       String? mimeType;
       if (assetPath.endsWith('.ogg')) {
@@ -213,7 +228,9 @@ class SoundManager {
         mimeType = 'audio/mpeg';
       }
       await player.play(AssetSource(assetPath, mimeType: mimeType));
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('SoundManager _playFile error ($assetPath): $e');
+    }
   }
 
   void dispose() {

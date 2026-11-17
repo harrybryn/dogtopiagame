@@ -77,76 +77,84 @@ class _DogtopiaRootState extends State<DogtopiaRoot> {
 
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: _game,
-      builder: (context, _) {
-        if (_isLoading) {
-          return LoadingScreen(
-            duration: const Duration(milliseconds: 2600),
-            onFinish: () {
-              if (mounted) {
-                setState(() => _isLoading = false);
-                if (_game.bgmEnabled) {
-                  SoundManager.instance.startBgm();
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (_) {
+        SoundManager.instance.handleUserInteraction();
+      },
+      child: ListenableBuilder(
+        listenable: _game,
+        builder: (context, _) {
+          if (_isLoading) {
+            return LoadingScreen(
+              duration: const Duration(milliseconds: 2600),
+              onFinish: () {
+                if (mounted) {
+                  setState(() => _isLoading = false);
+                  if (_game.bgmEnabled) {
+                    SoundManager.instance.startBgm();
+                  }
                 }
-              }
-            },
-          );
-        }
-
-        switch (_currentRoute) {
-          case 'factory':
-            final habitat = _routeArgs['habitat'] as HabitatModel? ??
-                _game.placedHabitats.firstWhere((h) => h.isFactory,
-                    orElse: () => HabitatModel.createDefaultDogfoodFactory());
-            return DogFactoryInsidePage(
-              game: _game,
-              habitat: habitat,
-              onBackToWorld: () => _navigateTo('world'),
+              },
             );
+          }
 
-          case 'habitat':
-            final habitat = _routeArgs['habitat'] as HabitatModel? ??
-                _game.placedHabitats.first;
-            if (habitat.isFactory) {
+          switch (_currentRoute) {
+            case 'factory':
+              final habitat = _routeArgs['habitat'] as HabitatModel? ??
+                  _game.placedHabitats.firstWhere((h) => h.isFactory,
+                      orElse: () => HabitatModel.createDefaultDogfoodFactory());
               return DogFactoryInsidePage(
                 game: _game,
                 habitat: habitat,
                 onBackToWorld: () => _navigateTo('world'),
               );
-            }
-            return HabitatCarePage(
-              game: _game,
-              habitat: habitat,
-              onBackToWorld: () => _navigateTo('world'),
-              onStartTransferDog: (dog, fromHabId) {
-                _navigateTo('world', args: {
-                  'transferDog': dog,
-                  'fromHabitatId': fromHabId,
-                });
-              },
-            );
 
-          case 'breeding':
-            return BreedingPage(
-              game: _game,
-              onBackToWorld: () => _navigateTo('world'),
-            );
+            case 'habitat':
+              final habitat = _routeArgs['habitat'] as HabitatModel? ??
+                  _game.placedHabitats.first;
+              final initialDogIndex = _routeArgs['initialDogIndex'] as int? ?? 0;
+              if (habitat.isFactory) {
+                return DogFactoryInsidePage(
+                  game: _game,
+                  habitat: habitat,
+                  onBackToWorld: () => _navigateTo('world'),
+                );
+              }
+              return HabitatCarePage(
+                game: _game,
+                habitat: habitat,
+                initialDogIndex: initialDogIndex,
+                onBackToWorld: () => _navigateTo('world'),
+                onStartTransferDog: (dog, fromHabId) {
+                  _navigateTo('world', args: {
+                    'transferDog': dog,
+                    'fromHabitatId': fromHabId,
+                  });
+                },
+              );
 
-          case 'collection':
-            return CollectionBookPage(
-              onBackToWorld: () => _navigateTo('world'),
-            );
+            case 'breeding':
+              return BreedingPage(
+                game: _game,
+                onBackToWorld: () => _navigateTo('world'),
+              );
 
-          case 'world':
-          default:
-            return WorldViewPage(
-              game: _game,
-              onNavigate: _navigateTo,
-              initialArgs: _routeArgs,
-            );
-        }
-      },
+            case 'collection':
+              return CollectionBookPage(
+                onBackToWorld: () => _navigateTo('world'),
+              );
+
+            case 'world':
+            default:
+              return WorldViewPage(
+                game: _game,
+                onNavigate: _navigateTo,
+                initialArgs: _routeArgs,
+              );
+          }
+        },
+      ),
     );
   }
 }

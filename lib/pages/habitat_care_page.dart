@@ -12,6 +12,7 @@ class HabitatCarePage extends StatefulWidget {
   final HabitatModel habitat;
   final VoidCallback onBackToWorld;
   final Function(DogModel dog, String fromHabitatId)? onStartTransferDog;
+  final int initialDogIndex;
 
   const HabitatCarePage({
     super.key,
@@ -19,6 +20,7 @@ class HabitatCarePage extends StatefulWidget {
     required this.habitat,
     required this.onBackToWorld,
     this.onStartTransferDog,
+    this.initialDogIndex = 0,
   });
 
   @override
@@ -33,7 +35,10 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
   @override
   void initState() {
     super.initState();
-    _selectedDogIndex = 0;
+    _selectedDogIndex = widget.initialDogIndex.clamp(
+      0,
+      widget.habitat.dogs.isNotEmpty ? widget.habitat.dogs.length - 1 : 0,
+    );
   }
 
   DogModel? get _currentDog {
@@ -426,64 +431,129 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
                       : Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            // 1. Dog Name Plaque with Edit Pencil & Level Pill
-                            HoverScale(
-                              scale: 1.05,
-                              onTap: _renameCurrentDog,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.92),
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(
-                                      color: const Color(0xFFFBBF24), width: 1.5),
-                                  boxShadow: const [
-                                    BoxShadow(
-                                      color: Color(0x33000000),
-                                      blurRadius: 6,
-                                      offset: Offset(0, 2),
-                                    ),
-                                  ],
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(Icons.edit_rounded,
-                                        size: 13, color: Color(0xFF78350F)),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      dog.name.toUpperCase(),
-                                      style: const TextStyle(
-                                        color: Color(0xFF451A03),
-                                        fontFamily: 'Lilita One',
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w900,
-                                        letterSpacing: 0.5,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 6, vertical: 2),
+                            // 1. Dog Name Plaque with Edit Pencil & Level Pill + Left/Right arrows
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (widget.habitat.dogs.length > 1)
+                                  HoverScale(
+                                    scale: 1.15,
+                                    onTap: () {
+                                      setState(() {
+                                        _selectedDogIndex = (_selectedDogIndex - 1 + widget.habitat.dogs.length) %
+                                            widget.habitat.dogs.length;
+                                      });
+                                    },
+                                    child: Container(
+                                      margin: const EdgeInsets.only(right: 8),
+                                      padding: const EdgeInsets.all(5),
                                       decoration: BoxDecoration(
-                                        color: const Color(0xFFF59E0B),
-                                        borderRadius: BorderRadius.circular(10),
+                                        shape: BoxShape.circle,
+                                        color: const Color(0xCC290E02),
+                                        border: Border.all(
+                                            color: const Color(0xFFFBBF24), width: 1.5),
+                                        boxShadow: const [
+                                          BoxShadow(
+                                            color: Color(0x40000000),
+                                            blurRadius: 4,
+                                            offset: Offset(0, 2),
+                                          ),
+                                        ],
                                       ),
-                                      child: Text(
-                                        'LV ${dog.level}',
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontFamily: 'Lilita One',
-                                          fontSize: 9.5,
-                                          fontWeight: FontWeight.w900,
-                                          height: 1.0,
-                                        ),
-                                      ),
+                                      child: const Icon(Icons.arrow_back_ios_new_rounded,
+                                          size: 13, color: Color(0xFFFEF08A)),
                                     ),
-                                  ],
+                                  ),
+
+                                HoverScale(
+                                  scale: 1.05,
+                                  onTap: _renameCurrentDog,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withOpacity(0.92),
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(
+                                          color: const Color(0xFFFBBF24), width: 1.5),
+                                      boxShadow: const [
+                                        BoxShadow(
+                                          color: Color(0x33000000),
+                                          blurRadius: 6,
+                                          offset: Offset(0, 2),
+                                        ),
+                                      ],
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(Icons.edit_rounded,
+                                            size: 13, color: Color(0xFF78350F)),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          dog.name.toUpperCase(),
+                                          style: const TextStyle(
+                                            color: Color(0xFF451A03),
+                                            fontFamily: 'Lilita One',
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w900,
+                                            letterSpacing: 0.5,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFF59E0B),
+                                            borderRadius: BorderRadius.circular(10),
+                                          ),
+                                          child: Text(
+                                            'LV ${dog.level}',
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontFamily: 'Lilita One',
+                                              fontSize: 9.5,
+                                              fontWeight: FontWeight.w900,
+                                              height: 1.0,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                 ),
-                              ),
+
+                                if (widget.habitat.dogs.length > 1)
+                                  HoverScale(
+                                    scale: 1.15,
+                                    onTap: () {
+                                      setState(() {
+                                        _selectedDogIndex =
+                                            (_selectedDogIndex + 1) % widget.habitat.dogs.length;
+                                      });
+                                    },
+                                    child: Container(
+                                      margin: const EdgeInsets.only(left: 8),
+                                      padding: const EdgeInsets.all(5),
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: const Color(0xCC290E02),
+                                        border: Border.all(
+                                            color: const Color(0xFFFBBF24), width: 1.5),
+                                        boxShadow: const [
+                                          BoxShadow(
+                                            color: Color(0x40000000),
+                                            blurRadius: 4,
+                                            offset: Offset(0, 2),
+                                          ),
+                                        ],
+                                      ),
+                                      child: const Icon(Icons.arrow_forward_ios_rounded,
+                                          size: 13, color: Color(0xFFFEF08A)),
+                                    ),
+                                  ),
+                              ],
                             ),
                             const SizedBox(height: 6),
 

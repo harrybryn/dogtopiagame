@@ -16,7 +16,7 @@ class WorldHUD extends StatelessWidget {
   final VoidCallback onOpenSettings;
   final VoidCallback onOpenBreeding;
   final VoidCallback onOpenCollection;
-  final Function(HabitatModel) onOpenHabitatCare;
+  final void Function(HabitatModel hab, [int dogIndex]) onOpenHabitatCare;
   final Function(HabitatModel) onStartMoveHabitat;
   final Function(HabitatModel) onOpenHabitatInfo;
   final VoidCallback onDeselectHabitat;
@@ -692,10 +692,10 @@ class WorldHUD extends StatelessWidget {
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            for (final dog in hab.dogs.take(4)) ...[
+                            for (int i = 0; i < hab.dogs.length && i < 4; i++) ...[
                               Padding(
                                 padding: const EdgeInsets.only(right: 10),
-                                child: _buildResidentDogAvatar(dog, hab),
+                                child: _buildResidentDogAvatar(hab.dogs[i], hab, i),
                               ),
                             ],
                           ],
@@ -1037,13 +1037,13 @@ class WorldHUD extends StatelessWidget {
     );
   }
 
-  Widget _buildResidentDogAvatar(DogModel dog, HabitatModel hab) {
+  Widget _buildResidentDogAvatar(DogModel dog, HabitatModel hab, int dogIndex) {
     final stageInfo = DogStageInfo.getInfo(dog);
     final dogName = dog.name.trim().isEmpty ? 'Bulldog' : dog.name;
 
     return HoverScale(
       scale: 1.08,
-      onTap: () => onOpenHabitatCare(hab),
+      onTap: () => onOpenHabitatCare(hab, dogIndex),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [

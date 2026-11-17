@@ -47,9 +47,13 @@ class _BuildShopDialogState extends State<BuildShopDialog> {
       case 'categories':
         return 'SHOP CATEGORIES';
       case 'diamonds':
-        return _currencyTab == 'diamonds'
-            ? 'BUY DIAMONDS (PHP ₱)'
-            : 'BUY COINS (DIAMONDS)';
+        if (_currencyTab == 'diamonds') {
+          return 'BUY DIAMONDS (PHP ₱)';
+        } else if (_currencyTab == 'coins_real') {
+          return 'BUY GOLD COINS (PHP ₱)';
+        } else {
+          return 'CONVERT DIAMONDS TO COINS';
+        }
       case 'habitats':
         return 'ISLAND HABITATS';
       case 'dogs':
@@ -215,8 +219,9 @@ class _BuildShopDialogState extends State<BuildShopDialog> {
                                 Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    _buildCurrencyFilterTab('diamonds', 'DIAMONDS'),
-                                    _buildCurrencyFilterTab('coins', 'COINS'),
+                                    _buildCurrencyFilterTab('diamonds', 'DIAMONDS (₱)'),
+                                    _buildCurrencyFilterTab('coins_real', 'GOLD (₱)'),
+                                    _buildCurrencyFilterTab('coins', 'CONVERT (💎)'),
                                   ],
                                 ),
 
@@ -900,16 +905,19 @@ class _BuildShopDialogState extends State<BuildShopDialog> {
 
   // ── 7. Diamonds / Currency View ──
   Widget _buildDiamondsView() {
+    if (_currencyTab == 'coins_real') {
+      return _buildCoinsRealMoneyView();
+    }
     if (_currencyTab == 'coins') {
       return _buildCoinsCurrencyView();
     }
     final tiers = [
-      {'name': 'Pile of Diamonds', 'amount': 50, 'price': '₱49.00', 'badge': ''},
-      {'name': 'Bag of Diamonds', 'amount': 150, 'price': '₱129.00', 'badge': ''},
-      {'name': 'Chest of Diamonds', 'amount': 500, 'price': '₱399.00', 'badge': 'POPULAR'},
-      {'name': 'Vault of Diamonds', 'amount': 1200, 'price': '₱799.00', 'badge': 'BEST VALUE'},
-      {'name': 'Treasury of Diamonds', 'amount': 2800, 'price': '₱1,499.00', 'badge': '+60% EXTRA'},
-      {'name': 'Mountain of Diamonds', 'amount': 6500, 'price': '₱2,999.00', 'badge': 'MEGA HOARD'},
+      {'name': 'Pile of Diamonds', 'amount': 50, 'bonusCoins': 10000, 'price': '₱49.00', 'badge': ''},
+      {'name': 'Bag of Diamonds', 'amount': 150, 'bonusCoins': 35000, 'price': '₱129.00', 'badge': ''},
+      {'name': 'Chest of Diamonds', 'amount': 500, 'bonusCoins': 120000, 'price': '₱399.00', 'badge': 'POPULAR'},
+      {'name': 'Vault of Diamonds', 'amount': 1200, 'bonusCoins': 300000, 'price': '₱799.00', 'badge': 'BEST VALUE'},
+      {'name': 'Treasury of Diamonds', 'amount': 2800, 'bonusCoins': 800000, 'price': '₱1,499.00', 'badge': '+60% EXTRA'},
+      {'name': 'Mountain of Diamonds', 'amount': 6500, 'bonusCoins': 2000000, 'price': '₱2,999.00', 'badge': 'MEGA HOARD'},
     ];
 
     return LayoutBuilder(
@@ -935,8 +943,11 @@ class _BuildShopDialogState extends State<BuildShopDialog> {
             return HoverScale(
               scale: 1.04,
               onTap: () {
-                widget.game.addDiamonds(t['amount'] as int);
-                _showToast('+${t['amount']} Star Crystals added!');
+                final amount = t['amount'] as int;
+                final bonusCoins = t['bonusCoins'] as int;
+                widget.game.addDiamonds(amount);
+                widget.game.addCoins(bonusCoins);
+                _showToast('+$amount Diamonds & +${_fmt(bonusCoins)} Bonus Gold added!');
               },
               child: Container(
                 decoration: BoxDecoration(
@@ -982,6 +993,191 @@ class _BuildShopDialogState extends State<BuildShopDialog> {
                           // Diamonds Count
                           Text(
                             '${t['amount']} Diamonds',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Color(0xFF451A03),
+                              fontFamily: 'Lilita One',
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 0.2,
+                            ),
+                          ),
+
+                          // Bonus Gold Portion
+                          Text(
+                            '+${_fmt(t['bonusCoins'] as int)} Gold Bonus',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Color(0xFFD97706),
+                              fontFamily: 'Fredoka',
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+
+                          // Buy Button
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 4),
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFF10B981), Color(0xFF059669)],
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                              ),
+                              borderRadius: BorderRadius.circular(10),
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: Color(0x33000000),
+                                  offset: Offset(0, 2),
+                                  blurRadius: 3,
+                                ),
+                              ],
+                            ),
+                            child: Text(
+                              t['price'] as String,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontFamily: 'Lilita One',
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Badge Pill if present (e.g. POPULAR, BEST VALUE)
+                    if (badge.isNotEmpty)
+                      Positioned(
+                        top: 4,
+                        right: 4,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFFEF4444), Color(0xFFDC2626)],
+                            ),
+                            borderRadius: BorderRadius.circular(6),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Color(0x33000000),
+                                offset: Offset(0, 1),
+                                blurRadius: 2,
+                              ),
+                            ],
+                          ),
+                          child: Text(
+                            badge,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontFamily: 'Lilita One',
+                              fontSize: 8,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // ── 7B. Gold Coins Real Money View (PHP ₱) ──
+  Widget _buildCoinsRealMoneyView() {
+    final goldTiers = [
+      {'name': 'Pouch of Gold', 'amount': 50000, 'price': '₱49.00', 'badge': ''},
+      {'name': 'Sack of Gold', 'amount': 160000, 'price': '₱129.00', 'badge': ''},
+      {'name': 'Chest of Gold', 'amount': 550000, 'price': '₱399.00', 'badge': 'POPULAR'},
+      {'name': 'Vault of Gold', 'amount': 1350000, 'price': '₱799.00', 'badge': 'BEST VALUE'},
+      {'name': 'Treasury of Gold', 'amount': 3200000, 'price': '₱1,499.00', 'badge': '+60% EXTRA'},
+      {'name': 'Mountain of Gold', 'amount': 8500000, 'price': '₱2,999.00', 'badge': 'MEGA HOARD'},
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const double spacing = 10.0;
+        final double cardW = (constraints.maxWidth - spacing * 2) / 3;
+        final double cardH = (constraints.maxHeight - spacing) / 2;
+        final double ratio = cardW / cardH;
+
+        return GridView.builder(
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 3,
+            childAspectRatio: ratio,
+            crossAxisSpacing: spacing,
+            mainAxisSpacing: spacing,
+          ),
+          itemCount: goldTiers.length,
+          itemBuilder: (context, index) {
+            final t = goldTiers[index];
+            final badge = t['badge'] as String;
+            final amount = t['amount'] as int;
+
+            return HoverScale(
+              scale: 1.04,
+              onTap: () {
+                widget.game.addCoins(amount);
+                _showToast('+${_fmt(amount)} Paw Coins added!');
+              },
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: const RadialGradient(
+                    center: Alignment(0, -0.4),
+                    radius: 0.9,
+                    colors: [
+                      Color(0xFFFFFFFF),
+                      Color(0xFFFEF9EE),
+                      Color(0xFFFAE8C8),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: const Color(0xFFD97706), width: 2.0),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x2978350F),
+                      offset: Offset(0, 3),
+                      blurRadius: 8,
+                    ),
+                  ],
+                ),
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 6),
+                      child: Column(
+                        children: [
+                          // Graphic Image
+                          Expanded(
+                            child: Center(
+                              child: Image.asset(
+                                'assets/ui/coins.png',
+                                fit: BoxFit.contain,
+                                filterQuality: FilterQuality.high,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+
+                          // Coins Count
+                          Text(
+                            '${_fmt(amount)} Gold',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             textAlign: TextAlign.center,

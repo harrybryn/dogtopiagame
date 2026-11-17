@@ -131,7 +131,7 @@ class DogCatalogItem {
     required this.portraitAsset,
     required this.sitAsset,
     this.requiredLevel = 2,
-    this.isLocked = true,
+    this.isLocked = false,
   });
 }
 
@@ -340,8 +340,8 @@ class HabitatCatalog {
       isDefault: true,
       portraitAsset: 'assets/itemsInShop/dogs/BulldogPuppySit.png',
       sitAsset: 'assets/itemsInShop/dogs/BulldogPuppySit.png',
-      requiredLevel: 2,
-      isLocked: true,
+      requiredLevel: 1,
+      isLocked: false,
     ),
     DogCatalogItem(
       id: 'pug',
@@ -358,7 +358,7 @@ class HabitatCatalog {
       portraitAsset: 'assets/itemsInShop/dogs/PugPuppySit.png',
       sitAsset: 'assets/itemsInShop/dogs/PugPuppySit.png',
       requiredLevel: 2,
-      isLocked: true,
+      isLocked: false,
     ),
     DogCatalogItem(
       id: 'arctic-husky',
@@ -375,7 +375,7 @@ class HabitatCatalog {
       portraitAsset: 'assets/itemsInShop/dogs/HuskyPuppySit.png',
       sitAsset: 'assets/itemsInShop/dogs/HuskyPuppySit.png',
       requiredLevel: 2,
-      isLocked: true,
+      isLocked: false,
     ),
     DogCatalogItem(
       id: 'white-samoyed',
@@ -392,7 +392,7 @@ class HabitatCatalog {
       portraitAsset: 'assets/itemsInShop/dogs/WhiteSamoyedPuppySit.png',
       sitAsset: 'assets/itemsInShop/dogs/WhiteSamoyedPuppySit.png',
       requiredLevel: 3,
-      isLocked: true,
+      isLocked: false,
     ),
     DogCatalogItem(
       id: 'beagle',
@@ -409,7 +409,7 @@ class HabitatCatalog {
       portraitAsset: 'assets/itemsInShop/dogs/BeaglePuppySit.png',
       sitAsset: 'assets/itemsInShop/dogs/BeaglePuppySit.png',
       requiredLevel: 3,
-      isLocked: true,
+      isLocked: false,
     ),
     DogCatalogItem(
       id: 'shiba-inu',
@@ -426,7 +426,7 @@ class HabitatCatalog {
       portraitAsset: 'assets/itemsInShop/dogs/ShibaPuppySit.png',
       sitAsset: 'assets/itemsInShop/dogs/ShibaPuppySit.png',
       requiredLevel: 4,
-      isLocked: true,
+      isLocked: false,
     ),
     DogCatalogItem(
       id: 'german-shepherd',
@@ -443,7 +443,7 @@ class HabitatCatalog {
       portraitAsset: 'assets/itemsInShop/dogs/GermanPuppySit.png',
       sitAsset: 'assets/itemsInShop/dogs/GermanPuppySit.png',
       requiredLevel: 4,
-      isLocked: true,
+      isLocked: false,
     ),
     DogCatalogItem(
       id: 'pharaoh-hound',
@@ -460,7 +460,7 @@ class HabitatCatalog {
       portraitAsset: 'assets/itemsInShop/dogs/PharaohPuppySit.png',
       sitAsset: 'assets/itemsInShop/dogs/PharaohPuppySit.png',
       requiredLevel: 5,
-      isLocked: true,
+      isLocked: false,
     ),
     DogCatalogItem(
       id: 'golden-retriever',
@@ -477,7 +477,7 @@ class HabitatCatalog {
       portraitAsset: 'assets/itemsInShop/dogs/GoldenRetrieverPuppySit.png',
       sitAsset: 'assets/itemsInShop/dogs/GoldenRetrieverPuppySit.png',
       requiredLevel: 5,
-      isLocked: true,
+      isLocked: false,
     ),
     DogCatalogItem(
       id: 'labrador',
@@ -494,7 +494,7 @@ class HabitatCatalog {
       portraitAsset: 'assets/itemsInShop/dogs/LabradorPuppySit.png',
       sitAsset: 'assets/itemsInShop/dogs/LabradorPuppySit.png',
       requiredLevel: 6,
-      isLocked: true,
+      isLocked: false,
     ),
     DogCatalogItem(
       id: 'astral-hound',
@@ -512,7 +512,7 @@ class HabitatCatalog {
       portraitAsset: 'assets/itemsInShop/dogs/AstralPuppySit.png',
       sitAsset: 'assets/itemsInShop/dogs/AstralPuppySit.png',
       requiredLevel: 8,
-      isLocked: true,
+      isLocked: false,
     ),
     DogCatalogItem(
       id: 'chronos-dog',
@@ -530,7 +530,7 @@ class HabitatCatalog {
       portraitAsset: 'assets/itemsInShop/dogs/ChronosPuppySit.png',
       sitAsset: 'assets/itemsInShop/dogs/ChronosPuppySit.png',
       requiredLevel: 10,
-      isLocked: true,
+      isLocked: false,
     ),
   ];
 

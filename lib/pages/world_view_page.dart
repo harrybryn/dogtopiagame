@@ -402,11 +402,14 @@ class _WorldViewPageState extends State<WorldViewPage> {
                   },
                   onOpenBreeding: () => widget.onNavigate('breeding'),
                   onOpenCollection: () => widget.onNavigate('collection'),
-                  onOpenHabitatCare: (hab) {
+                  onOpenHabitatCare: (hab, [dogIndex = 0]) {
                     if (hab.isFactory) {
                       widget.onNavigate('factory', args: {'habitat': hab});
                     } else {
-                      widget.onNavigate('habitat', args: {'habitat': hab});
+                      widget.onNavigate('habitat', args: {
+                        'habitat': hab,
+                        'initialDogIndex': dogIndex,
+                      });
                     }
                   },
                   onStartMoveHabitat: (hab) => _startMoving(hab),
@@ -711,7 +714,6 @@ class _WorldViewPageState extends State<WorldViewPage> {
 
   void _showExpandLotDialogForLot(int lotNumber) {
     final cost = 2500;
-    final xpReward = 120;
     final canAfford = widget.game.coins >= cost;
     final lotTitle = lotNumber == 1 ? 'EXPANSION LOT 1 (PARK BENCH)' : 'EXPANSION LOT 2 (MEADOW)';
     final lotSubtitle = lotNumber == 1
@@ -784,32 +786,6 @@ class _WorldViewPageState extends State<WorldViewPage> {
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(height: 14),
-
-              // Reward & Perks row
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _buildExpandPerkBadge(
-                    icon: Icons.open_with_rounded,
-                    label: 'New Space',
-                    sub: '+6 Columns',
-                    color: const Color(0xFF3B82F6),
-                  ),
-                  _buildExpandPerkBadge(
-                    icon: Icons.star_rounded,
-                    label: 'XP Reward',
-                    sub: '+$xpReward XP',
-                    color: const Color(0xFF10B981),
-                  ),
-                  _buildExpandPerkBadge(
-                    icon: Icons.pets_rounded,
-                    label: 'Habitats',
-                    sub: lotNumber == 1 ? '+1/4 Island' : 'Full Island!',
-                    color: const Color(0xFFEC4899),
-                  ),
-                ],
               ),
               const SizedBox(height: 16),
 
@@ -1272,45 +1248,6 @@ class _WorldViewPageState extends State<WorldViewPage> {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildExpandPerkBadge({
-    required IconData icon,
-    required String label,
-    required String sub,
-    required Color color,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.4)),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, color: color, size: 22),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: TextStyle(
-              fontFamily: 'Fredoka',
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
-          ),
-          Text(
-            sub,
-            style: const TextStyle(
-              fontFamily: 'Lilita One',
-              fontSize: 12,
-              color: Color(0xFF3B1404),
-            ),
-          ),
-        ],
       ),
     );
   }
