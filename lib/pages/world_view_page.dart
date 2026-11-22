@@ -7,6 +7,7 @@ import '../models/habitat_catalog.dart';
 import '../models/dog_model.dart';
 import '../models/dog_evolution.dart';
 import '../components/common/hover_scale.dart';
+import '../components/common/sky_background.dart';
 import '../components/world/world_isometric_grid.dart';
 import '../components/world/world_hud.dart';
 import '../components/world/build_shop_dialog.dart';
@@ -203,10 +204,13 @@ class _WorldViewPageState extends State<WorldViewPage> {
         _adoptingDogItem != null || _transferringDog != null;
     final compatibleHabitatIds =
         isSelectingHabitat ? _getCompatibleHabitatIds() : <String>{};
+    final isCompactHud = MediaQuery.sizeOf(context).width < 880;
 
     return Scaffold(
       backgroundColor: const Color(0xFF160702),
-      body: LayoutBuilder(
+      body: SkyBackground(
+        showLand: false,
+        child: LayoutBuilder(
         builder: (context, constraints) {
           final W = constraints.maxWidth;
           final H = constraints.maxHeight;
@@ -301,7 +305,8 @@ class _WorldViewPageState extends State<WorldViewPage> {
                   if (pointerSignal is PointerScrollEvent) {
                     final zoomDelta = pointerSignal.scrollDelta.dy < 0 ? 1.12 : 0.89;
                     setState(() {
-                      _zoom = (_zoom * zoomDelta).clamp(1.0, 2.8);
+                      final minZoom = W < 600 ? 0.60 : (W < 900 ? 0.80 : 1.0);
+                      _zoom = (_zoom * zoomDelta).clamp(minZoom, 2.8);
                       final nextScaledW = worldWidth * baseScale * _zoom;
                       final nextScaledH = worldHeight * baseScale * _zoom;
                       final nextMaxX = max(0.0, (nextScaledW - W) / 2);
@@ -328,7 +333,7 @@ class _WorldViewPageState extends State<WorldViewPage> {
                             // Multi-touch pinch zoom
                             if (details.scale != 1.0) {
                               _zoom =
-                                  (_startZoom * details.scale).clamp(1.0, 2.8);
+                                  (_startZoom * details.scale).clamp(W < 600 ? 0.60 : (W < 900 ? 0.80 : 1.0), 2.8);
                             }
                             // Mouse or finger pan
                             _camX += details.focalPointDelta.dx;
@@ -455,7 +460,12 @@ class _WorldViewPageState extends State<WorldViewPage> {
                   onOpenSocial: () {
                     showDialog(
                       context: context,
-                      builder: (_) => const SocialDialog(),
+                      builder: (_) => SocialDialog(
+                        onVisit: () {
+                          Navigator.of(context).pop();
+                          widget.onNavigate('friend_visit');
+                        },
+                      ),
                     );
                   },
                   onOpenRanking: () {
@@ -507,7 +517,9 @@ class _WorldViewPageState extends State<WorldViewPage> {
               // ── 4. HUD Toast Notification Overlay ──
               if (_hudToast != null)
                 Positioned(
-                  top: isSelectingHabitat ? 95 : 80,
+                  top: isSelectingHabitat
+                      ? (isCompactHud ? 130 : 95)
+                      : (isCompactHud ? 140 : 80),
                   left: 0,
                   right: 0,
                   child: Center(
@@ -543,6 +555,7 @@ class _WorldViewPageState extends State<WorldViewPage> {
           );
         },
       ),
+      ),
     );
   }
 
@@ -558,9 +571,13 @@ class _WorldViewPageState extends State<WorldViewPage> {
       top: 20,
       left: 0,
       right: 0,
-      child: Center(
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        child: Center(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           decoration: BoxDecoration(
             gradient: const LinearGradient(
               colors: [Color(0xF02A1205), Color(0xF0451A03)],
@@ -675,6 +692,8 @@ class _WorldViewPageState extends State<WorldViewPage> {
             ],
           ),
         ),
+        ),
+      ),
       ),
     );
   }
@@ -975,6 +994,7 @@ class _WorldViewPageState extends State<WorldViewPage> {
       builder: (ctx) => GenericModal(
         title: 'CLEAR OBSTACLE',
         maxWidth: 460,
+        scrollable: true,
         onClose: () => Navigator.of(ctx).pop(),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1227,6 +1247,7 @@ class _WorldViewPageState extends State<WorldViewPage> {
       builder: (ctx) => GenericModal(
         title: 'CLEARING IN PROGRESS',
         maxWidth: 440,
+        scrollable: true,
         onClose: () => Navigator.of(ctx).pop(),
         child: Column(
           mainAxisSize: MainAxisSize.min,

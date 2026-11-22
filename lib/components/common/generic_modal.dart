@@ -8,6 +8,10 @@ class GenericModal extends StatelessWidget {
   final VoidCallback onClose;
   final double maxWidth;
 
+  /// Wrap the body in a vertical scroll view. Use this for fixed-height
+  /// content that could overflow on short screens.
+  final bool scrollable;
+
   const GenericModal({
     super.key,
     required this.title,
@@ -15,6 +19,7 @@ class GenericModal extends StatelessWidget {
     required this.child,
     this.titleExtra,
     this.maxWidth = 720,
+    this.scrollable = false,
   });
 
   @override
@@ -131,7 +136,9 @@ class GenericModal extends StatelessWidget {
                   borderRadius: BorderRadius.circular(16),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                    child: child,
+                    child: scrollable
+                        ? SingleChildScrollView(child: child)
+                        : child,
                   ),
                 ),
               ),

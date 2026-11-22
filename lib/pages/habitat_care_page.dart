@@ -3,6 +3,7 @@ import '../state/game_controller.dart';
 import '../models/habitat_model.dart';
 import '../models/dog_model.dart';
 import '../models/dog_evolution.dart';
+import '../models/friend_visit_model.dart';
 import '../models/habitat_catalog.dart';
 import '../models/walkthrough_step.dart';
 import '../components/common/hover_scale.dart';
@@ -16,6 +17,12 @@ class HabitatCarePage extends StatefulWidget {
   final int initialDogIndex;
   final Map<String, GlobalKey>? walkthroughKeys;
 
+  /// When true this is a mock friend visit: feeding uses your kibble to help
+  /// the friend's dog grow, but ownership actions (rename/transfer/sell) are
+  /// unavailable and you do not earn their coins.
+  final bool isVisitMode;
+  final MockFriend? visitFriend;
+
   const HabitatCarePage({
     super.key,
     required this.game,
@@ -24,6 +31,8 @@ class HabitatCarePage extends StatefulWidget {
     this.onStartTransferDog,
     this.initialDogIndex = 0,
     this.walkthroughKeys,
+    this.isVisitMode = false,
+    this.visitFriend,
   });
 
   @override
@@ -69,19 +78,65 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
 
   void _petDog() {
     final dog = _currentDog;
-    widget.game.addCoins(50);
+    if (widget.isVisitMode) {
+      widget.visitFriend?.helpCount += 1;
+      _showToast('${dog?.name ?? 'Companion'} loved the attention!');
+    } else {
+      widget.game.addCoins(50);
+      _showToast('+50 Paw Coins! Companion Loved!');
+    }
     setState(() => _showPetHeart = true);
     SoundManager.instance.playPet();
     SoundManager.instance.playDogBark(isPuppy: dog?.isPuppy ?? true, force: true);
-    _showToast('+50 Paw Coins! Companion Loved!');
     Future.delayed(const Duration(milliseconds: 1400), () {
       if (mounted) setState(() => _showPetHeart = false);
     });
   }
 
+  bool _feedVisitDog(DogModel dog) {
+    final info = DogStageInfo.getInfo(dog);
+    if (!widget.game.spendCurrency(kibble: info.kibbleCostPerFeed)) {
+      SoundManager.instance.playSadWhimper();
+      _showToast('Not enough Kibble! Produce more in the Kibble Bakery.');
+      return false;
+    }
+
+    final prevLevel = dog.level;
+    dog.feedProgress += 1;
+    if (dog.feedProgress >= dog.feedRequired) {
+      dog.feedProgress = 0;
+      dog.level += 1;
+      if (dog.level >= 12) {
+        dog.stage = 'Adult';
+      } else if (dog.level >= 4) {
+        dog.stage = 'Young';
+      }
+    }
+
+    widget.visitFriend?.helpCount += 1;
+    SoundManager.instance.playFeed();
+    if (dog.level > prevLevel) {
+      SoundManager.instance.playLevelUp();
+      SoundManager.instance.playDogBark(
+        isPuppy: dog.stage == 'Puppy',
+        force: true,
+      );
+      _showToast('LEVEL UP! ${dog.name} is now Level ${dog.level}!');
+    }
+    return true;
+  }
+
   void _feedSteps(int steps) {
     final dog = _currentDog;
     if (dog == null) return;
+
+    if (widget.isVisitMode) {
+      for (int i = 0; i < steps; i++) {
+        if (!_feedVisitDog(dog)) break;
+      }
+      setState(() {});
+      return;
+    }
 
     for (int i = 0; i < steps; i++) {
       final prevLevel = dog.level;
@@ -251,7 +306,19 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
   Widget build(BuildContext context) {
     final dog = _currentDog;
     final info = dog != null ? DogStageInfo.getInfo(dog) : null;
-    final hasEnoughKibble = info != null && widget.game.kibble >= info.kibbleCostPerFeed;
+    final hasEnoughKibble =
+        info != null && widget.game.kibble >= info.kibbleCostPerFeed;
+
+    final media = MediaQuery.of(context);
+    final screenW = media.size.width;
+    final isCompact = screenW < 980;
+    // Short landscape windows need smaller art and tighter spacing, otherwise
+    // the dog info sits far below the fold and requires endless scrolling.
+    final shortStage = media.size.height < 560;
+    final pillW = isCompact
+        ? ((screenW - 28 - 16) / 3).clamp(70.0, 138.0)
+        : 138.0;
+    final pillH = isCompact ? 36.0 : 44.0;
 
     return Scaffold(
       backgroundColor: const Color(0xFF160702),
@@ -267,160 +334,294 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
             ),
           ),
 
-          // ── 2. Top Navigation & Resource Bar ──
-          // ── TOP BAR LEFT: Back to Island Button ──
+          // ── 2. Unified Responsive Top Bar ──
           Positioned(
-            top: 14,
-            left: 20,
-            child: HoverScale(
-              key: widget.walkthroughKeys?[WalkthroughTargets.careBackButton],
-              scale: 1.06,
-              onTap: widget.onBackToWorld,
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFFFEF08A), Color(0xFFF59E0B)],
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                  ),
-                  borderRadius: BorderRadius.circular(16),
-                  border:
-                      Border.all(color: const Color(0xFFD97706), width: 2.0),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x66D97706),
-                      blurRadius: 8,
-                      offset: Offset(0, 3),
-                    ),
-                  ],
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.arrow_back_ios_new_rounded,
-                        size: 13, color: Color(0xFF3B1404)),
-                    SizedBox(width: 6),
-                    Text(
-                      'BACK TO ISLAND',
-                      style: TextStyle(
-                        color: Color(0xFF3B1404),
-                        fontFamily: 'Lilita One',
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 0.5,
+            top: 10,
+            left: 14,
+            right: 14,
+            child: isCompact
+                ? Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          _buildBackButton(isCompact: true),
+                          _buildTitlePlaque(isCompact: true),
+                        ],
                       ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+                      const SizedBox(height: 6),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          _buildWoodResourcePill(
+                            iconAsset: 'assets/ui/diamonds.png',
+                            value: '${widget.game.crystals}',
+                            onPlus: widget.onBackToWorld,
+                            pillW: pillW,
+                            pillH: pillH,
+                          ),
+                          const SizedBox(width: 8),
+                          _buildWoodResourcePill(
+                            iconAsset: 'assets/ui/coins.png',
+                            value: _fmt(widget.game.coins),
+                            onPlus: widget.onBackToWorld,
+                            pillW: pillW,
+                            pillH: pillH,
+                          ),
+                          const SizedBox(width: 8),
+                          _buildWoodResourcePill(
+                            iconAsset: 'assets/ui/dogfood.png',
+                            value: _fmt(widget.game.kibble),
+                            onPlus: widget.onBackToWorld,
+                            pillW: pillW,
+                            pillH: pillH,
+                          ),
+                        ],
+                      ),
+                    ],
+                  )
+                : Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      _buildBackButton(isCompact: false),
+                      const Spacer(),
+                      _buildTitlePlaque(isCompact: false),
+                      const Spacer(),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _buildWoodResourcePill(
+                            iconAsset: 'assets/ui/diamonds.png',
+                            value: '${widget.game.crystals}',
+                            onPlus: widget.onBackToWorld,
+                          ),
+                          const SizedBox(width: 8),
+                          _buildWoodResourcePill(
+                            iconAsset: 'assets/ui/coins.png',
+                            value: _fmt(widget.game.coins),
+                            onPlus: widget.onBackToWorld,
+                          ),
+                          const SizedBox(width: 8),
+                          _buildWoodResourcePill(
+                            iconAsset: 'assets/ui/dogfood.png',
+                            value: _fmt(widget.game.kibble),
+                            onPlus: widget.onBackToWorld,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
           ),
 
-          // ── TOP BAR RIGHT: Wood Resource Bar ──
+          // ── 3. Main Stage Content Area ──
           Positioned(
-            top: 14,
-            right: 20,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _buildWoodResourcePill(
-                  iconAsset: 'assets/ui/diamonds.png',
-                  value: '${widget.game.crystals}',
-                  onPlus: widget.onBackToWorld,
-                ),
-                const SizedBox(width: 8),
-                _buildWoodResourcePill(
-                  iconAsset: 'assets/ui/coins.png',
-                  value: _fmt(widget.game.coins),
-                  onPlus: widget.onBackToWorld,
-                ),
-                const SizedBox(width: 8),
-                _buildWoodResourcePill(
-                  iconAsset: 'assets/ui/dogfood.png',
-                  value: _fmt(widget.game.kibble),
-                  onPlus: widget.onBackToWorld,
-                ),
-              ],
-            ),
-          ),
-
-          // ── TOP BAR CENTER: Center Title Plaque (HabitatCare.png) ──
-          Positioned(
-            top: 2,
-            left: 0,
-            right: 0,
+            // The compact top bar is two rows tall. Start below the resource
+            // pills so the dog name plaque can never cover coins/kibble/gems.
+            top: isCompact ? 152 : 86,
+            bottom: 18,
+            left: isCompact ? 14 : 36,
+            right: isCompact ? 14 : 48,
             child: Center(
-              child: SizedBox(
-                width: 320,
-                height: 160,
-                child: Stack(
-                  alignment: Alignment.center,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1060),
+                // Always side-by-side, like the desktop layout. FittedBox
+                // scales each column down on short landscape windows so no
+                // scrolling is needed to reach the dog info.
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Image.asset(
-                      'assets/ui/HabitatCare.png',
-                      width: 320,
-                      height: 160,
-                      fit: BoxFit.contain,
-                      filterQuality: FilterQuality.high,
-                    ),
-                    Positioned(
-                      left: 104,
-                      right: 37,
-                      top: 0,
-                      bottom: 0,
-                      child: Center(
-                        child: Text(
-                          widget.habitat.name,
-                          textAlign: TextAlign.center,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontFamily: 'Lilita One',
-                            fontSize: 18.0,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 0.5,
-                            shadows: [
-                              Shadow(
-                                color: Color(0xFF3B1404),
-                                offset: Offset(0, 2),
-                                blurRadius: 2,
-                              ),
-                              Shadow(
-                                color: Colors.black,
-                                offset: Offset(0, 3),
-                                blurRadius: 6,
-                              ),
-                            ],
+                    Expanded(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.center,
+                        child: SizedBox(
+                          width: 360,
+                          child: _buildDogStage(
+                            dog,
+                            info,
+                            hasEnoughKibble,
+                            compact: shortStage,
                           ),
                         ),
                       ),
                     ),
+                    if (dog != null && info != null) ...[
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.center,
+                          child: SizedBox(
+                            width: 400,
+                            child: _buildStatCard(
+                              dog,
+                              info,
+                              compact: shortStage,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
             ),
           ),
 
-          // ── 3. Main Stage Content Area (Dragon City Side-by-Side, Centered & Balanced) ──
+          // ── 4. Toast Notification Overlay ──
+          if (_toastMessage != null)
+            Positioned(
+              top: isCompact ? 122 : 76,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xEE1E0A02),
+                    borderRadius: BorderRadius.circular(20),
+                    border:
+                        Border.all(color: const Color(0xFFFBBF24), width: 1.5),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x66000000),
+                        blurRadius: 10,
+                        offset: Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Text(
+                    _toastMessage!,
+                    style: const TextStyle(
+                      color: Color(0xFFFEF08A),
+                      fontFamily: 'Lilita One',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBackButton({required bool isCompact}) {
+    return HoverScale(
+      key: widget.walkthroughKeys?[WalkthroughTargets.careBackButton],
+      scale: 1.06,
+      onTap: widget.onBackToWorld,
+      child: Container(
+        padding: EdgeInsets.symmetric(
+            horizontal: isCompact ? 10 : 14, vertical: isCompact ? 6 : 7),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFFFEF08A), Color(0xFFF59E0B)],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFD97706), width: 2.0),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x66D97706),
+              blurRadius: 8,
+              offset: Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.arrow_back_ios_new_rounded,
+                size: 13, color: Color(0xFF3B1404)),
+            const SizedBox(width: 5),
+            Text(
+              isCompact ? 'BACK' : 'BACK TO ISLAND',
+              style: const TextStyle(
+                color: Color(0xFF3B1404),
+                fontFamily: 'Lilita One',
+                fontSize: 12.0,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTitlePlaque({required bool isCompact}) {
+    final double plaqueW = isCompact ? 180.0 : 280.0;
+    final double plaqueH = plaqueW * (160.0 / 320.0);
+    return SizedBox(
+      width: plaqueW,
+      height: plaqueH,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Image.asset(
+            'assets/ui/HabitatCare.png',
+            width: plaqueW,
+            height: plaqueH,
+            fit: BoxFit.contain,
+            filterQuality: FilterQuality.high,
+          ),
           Positioned(
-            top: 86,
-            bottom: 18,
-            left: 36,
-            right: 72,
+            left: plaqueW * (104.0 / 320.0),
+            right: plaqueW * (37.0 / 320.0),
+            top: 0,
+            bottom: 0,
             child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 1060),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                // ══════════════════════════════════════════
-                // LEFT COLUMN: Dog Character & Feed Station
-                // ══════════════════════════════════════════
-                Expanded(
-                  child: dog == null || info == null
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  widget.habitat.name,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontFamily: 'Lilita One',
+                    fontSize: isCompact ? 13.0 : 17.0,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.5,
+                    shadows: const [
+                      Shadow(
+                        color: Color(0xFF3B1404),
+                        offset: Offset(0, 2),
+                        blurRadius: 2,
+                      ),
+                      Shadow(
+                        color: Colors.black,
+                        offset: Offset(0, 3),
+                        blurRadius: 6,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDogStage(
+    DogModel? dog,
+    DogStageInfo? info,
+    bool hasEnoughKibble, {
+    bool compact = false,
+  }) {
+    final artH = compact ? 132.0 : 220.0;
+    final artW = compact ? 150.0 : 220.0;
+    final shadowH = compact ? 18.0 : 26.0;
+    final gap = compact ? 4.0 : 8.0;
+
+    return dog == null || info == null
                       ? Center(
                           child: Text(
                             'No dogs living here yet!\nAdopt puppies from the Shop.',
@@ -475,7 +676,8 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
 
                                 HoverScale(
                                   scale: 1.05,
-                                  onTap: _renameCurrentDog,
+                                  onTap:
+                                      widget.isVisitMode ? null : _renameCurrentDog,
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(
                                         horizontal: 12, vertical: 4),
@@ -495,9 +697,12 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        const Icon(Icons.edit_rounded,
-                                            size: 13, color: Color(0xFF78350F)),
-                                        const SizedBox(width: 6),
+                                        if (!widget.isVisitMode) ...[
+                                          const Icon(Icons.edit_rounded,
+                                              size: 13,
+                                              color: Color(0xFF78350F)),
+                                          const SizedBox(width: 6),
+                                        ],
                                         Text(
                                           dog.name.toUpperCase(),
                                           style: const TextStyle(
@@ -563,10 +768,13 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
                                   ),
                               ],
                             ),
-                            const SizedBox(height: 6),
+                            SizedBox(height: compact ? 3 : 6),
 
                             // 2. The Companion Dog with Ground Contact Shadow & Pet interaction
                             GestureDetector(
+                              key: widget.isVisitMode
+                                  ? const Key('friend_pet_dog')
+                                  : null,
                               behavior: HitTestBehavior.opaque,
                               onTap: _petDog,
                               child: Stack(
@@ -575,12 +783,12 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
                                 children: [
                                   // Radial Ground Shadow
                                   Container(
-                                    width: 220,
-                                    height: 26,
-                                    decoration: const BoxDecoration(
+                                    width: artW,
+                                    height: shadowH,
+                                    decoration: BoxDecoration(
                                       borderRadius: BorderRadius.all(
-                                          Radius.elliptical(220, 26)),
-                                      gradient: RadialGradient(
+                                          Radius.elliptical(artW, shadowH)),
+                                      gradient: const RadialGradient(
                                         colors: [
                                           Color(0xBB0F0702),
                                           Color(0x330F0702),
@@ -594,7 +802,7 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
                                   // Sitting Dog Sprite
                                   Image.asset(
                                     info.sitImg,
-                                    height: 220,
+                                    height: artH,
                                     fit: BoxFit.contain,
                                     filterQuality: FilterQuality.high,
                                   ),
@@ -616,7 +824,7 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
                                 ],
                               ),
                             ),
-                            const SizedBox(height: 8),
+                            SizedBox(height: gap),
 
                             // 3. Four-Segment Feed Progress Meter
                             Container(
@@ -644,27 +852,34 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
                                     mainAxisAlignment:
                                         MainAxisAlignment.spaceBetween,
                                     children: [
-                                      Row(
-                                        children: [
-                                          const Text(
-                                            'FEED PROGRESS ',
-                                            style: TextStyle(
-                                              color: Colors.white,
-                                              fontFamily: 'Lilita One',
-                                              fontSize: 10.5,
-                                              letterSpacing: 0.3,
-                                            ),
+                                      Expanded(
+                                        child: FittedBox(
+                                          fit: BoxFit.scaleDown,
+                                          alignment: Alignment.centerLeft,
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              const Text(
+                                                'FEED PROGRESS ',
+                                                style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontFamily: 'Lilita One',
+                                                  fontSize: 10.5,
+                                                  letterSpacing: 0.3,
+                                                ),
+                                              ),
+                                              Text(
+                                                '(${dog.feedProgress}/4)',
+                                                style: const TextStyle(
+                                                  color: Color(0xFFFEF08A),
+                                                  fontFamily: 'Lilita One',
+                                                  fontSize: 10.5,
+                                                  fontWeight: FontWeight.w900,
+                                                ),
+                                              ),
+                                            ],
                                           ),
-                                          Text(
-                                            '(${dog.feedProgress}/4)',
-                                            style: const TextStyle(
-                                              color: Color(0xFFFEF08A),
-                                              fontFamily: 'Lilita One',
-                                              fontSize: 10.5,
-                                              fontWeight: FontWeight.w900,
-                                            ),
-                                          ),
-                                        ],
+                                        ),
                                       ),
                                       Container(
                                         padding: const EdgeInsets.symmetric(
@@ -738,7 +953,7 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
                                 ],
                               ),
                             ),
-                            const SizedBox(height: 8),
+                            SizedBox(height: gap),
 
                             // 4. Dual Action Feed Buttons (FEED & FEED x4)
                             SizedBox(
@@ -886,21 +1101,17 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
                               ),
                             ),
                           ],
-                          ),
                         ),
-                ),
+                      );
+  }
 
-                const SizedBox(width: 20),
-
-                // ══════════════════════════════════════════
-                // RIGHT COLUMN: Stat Card Details (Square Cream Card)
-                // ══════════════════════════════════════════
-                if (dog != null && info != null)
-                  SizedBox(
-                    width: 460,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 26, vertical: 22),
+  Widget _buildStatCard(DogModel dog, DogStageInfo info,
+      {bool compact = false}) {
+    final vGap = compact ? 7.0 : 14.0;
+    return Container(
+                      padding: EdgeInsets.symmetric(
+                          horizontal: compact ? 14 : 26,
+                          vertical: compact ? 10 : 22),
                       decoration: BoxDecoration(
                         gradient: const RadialGradient(
                           center: Alignment(0, -0.4),
@@ -962,23 +1173,28 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
                                                 color: const Color(0xFF6EE7B7),
                                                 width: 1),
                                           ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              const Icon(Icons.star_rounded,
-                                                  color: Colors.white, size: 16),
-                                              const SizedBox(width: 4),
-                                              Text(
-                                                dog.element.toUpperCase(),
-                                                style: const TextStyle(
-                                                  color: Colors.white,
-                                                  fontFamily: 'Lilita One',
-                                                  fontSize: 13,
-                                                  fontWeight: FontWeight.w900,
-                                                  letterSpacing: 0.4,
+                                          child: FittedBox(
+                                            fit: BoxFit.scaleDown,
+                                            alignment: Alignment.centerLeft,
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Icon(Icons.star_rounded,
+                                                    color: Colors.white,
+                                                    size: 16),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  dog.element.toUpperCase(),
+                                                  style: const TextStyle(
+                                                    color: Colors.white,
+                                                    fontFamily: 'Lilita One',
+                                                    fontSize: 13,
+                                                    fontWeight: FontWeight.w900,
+                                                    letterSpacing: 0.4,
+                                                  ),
                                                 ),
-                                              ),
-                                            ],
+                                              ],
+                                            ),
                                           ),
                                         ),
                                       ],
@@ -1054,11 +1270,11 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 14),
+                              SizedBox(height: vGap),
 
                               const Divider(
                                   color: Color(0x3378350F), height: 1),
-                              const SizedBox(height: 14),
+                              SizedBox(height: vGap),
 
                               // Row 2: INCOME & MASTER POINTS
                               Row(
@@ -1080,25 +1296,30 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
                                           ),
                                         ),
                                         const SizedBox(height: 4),
-                                        Row(
-                                          children: [
-                                            Image.asset(
-                                              'assets/ui/coins.png',
-                                              width: 24,
-                                              height: 24,
-                                              fit: BoxFit.contain,
-                                            ),
-                                            const SizedBox(width: 6),
-                                            Text(
-                                              '+${info.coinRatePerMin}/min',
-                                              style: const TextStyle(
-                                                color: Color(0xFF3B1404),
-                                                fontFamily: 'Lilita One',
-                                                fontSize: 20,
-                                                fontWeight: FontWeight.w900,
+                                        FittedBox(
+                                          fit: BoxFit.scaleDown,
+                                          alignment: Alignment.centerLeft,
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Image.asset(
+                                                'assets/ui/coins.png',
+                                                width: 24,
+                                                height: 24,
+                                                fit: BoxFit.contain,
                                               ),
-                                            ),
-                                          ],
+                                              const SizedBox(width: 6),
+                                              Text(
+                                                '+${info.coinRatePerMin}/min',
+                                                style: const TextStyle(
+                                                  color: Color(0xFF3B1404),
+                                                  fontFamily: 'Lilita One',
+                                                  fontSize: 20,
+                                                  fontWeight: FontWeight.w900,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
                                         ),
                                       ],
                                     ),
@@ -1121,75 +1342,99 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
                                           ),
                                         ),
                                         const SizedBox(height: 4),
-                                        Row(
-                                          children: [
-                                            const Icon(
-                                              Icons.emoji_events_rounded,
-                                              color: Color(0xFFF59E0B),
-                                              size: 24,
-                                            ),
-                                            const SizedBox(width: 6),
-                                            Text(
-                                              '${dog.level * 40 + 15}',
-                                              style: const TextStyle(
-                                                color: Color(0xFF3B1404),
-                                                fontFamily: 'Lilita One',
-                                                fontSize: 20,
-                                                fontWeight: FontWeight.w900,
+                                        FittedBox(
+                                          fit: BoxFit.scaleDown,
+                                          alignment: Alignment.centerLeft,
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              const Icon(
+                                                Icons.emoji_events_rounded,
+                                                color: Color(0xFFF59E0B),
+                                                size: 24,
                                               ),
-                                            ),
-                                          ],
+                                              const SizedBox(width: 6),
+                                              Text(
+                                                '${dog.level * 40 + 15}',
+                                                style: const TextStyle(
+                                                  color: Color(0xFF3B1404),
+                                                  fontFamily: 'Lilita One',
+                                                  fontSize: 20,
+                                                  fontWeight: FontWeight.w900,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
                                         ),
                                       ],
                                     ),
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 14),
-
-                              const Divider(
-                                  color: Color(0x3378350F), height: 1),
-                              const SizedBox(height: 14),
-
-                              // Row 3: DESCRIPTION
-                              const Text(
-                                'DESCRIPTION',
-                                style: TextStyle(
-                                  color: Color(0xFF78350F),
-                                  fontFamily: 'Lilita One',
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w900,
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              Container(
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: const Color(0x66FEF3C7),
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(
-                                      color: const Color(0x40D97706), width: 1),
-                                ),
-                                child: Text(
-                                  info.description +
-                                      (info.isHusky
-                                          ? ' He loves frosty adventures and hearty meat feasts on the tundra!'
-                                          : ' He loves hearty kibble feasts and cozy afternoon naps on the lawn!'),
-                                  style: const TextStyle(
-                                    color: Color(0xFF3B1404),
-                                    fontFamily: 'Fredoka',
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    height: 1.35,
+                              // The description is the tallest block. Drop it
+                              // on short windows so the card fits without a scroll.
+                              if (!compact) ...[
+                                SizedBox(height: vGap),
+                                const Divider(
+                                    color: Color(0x3378350F), height: 1),
+                                SizedBox(height: vGap),
+                                const Text(
+                                  'DESCRIPTION',
+                                  style: TextStyle(
+                                    color: Color(0xFF78350F),
+                                    fontFamily: 'Lilita One',
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 0.5,
                                   ),
                                 ),
-                              ),
-                              const SizedBox(height: 16),
+                                const SizedBox(height: 6),
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0x66FEF3C7),
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(
+                                        color: const Color(0x40D97706), width: 1),
+                                  ),
+                                  child: Text(
+                                    info.description +
+                                        (info.isHusky
+                                            ? ' He loves frosty adventures and hearty meat feasts on the tundra!'
+                                            : ' He loves hearty kibble feasts and cozy afternoon naps on the lawn!'),
+                                    style: const TextStyle(
+                                      color: Color(0xFF3B1404),
+                                      fontFamily: 'Fredoka',
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      height: 1.35,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                              ],
+                              if (compact) ...[
+                                Padding(
+                                  padding: EdgeInsets.only(top: vGap + 2),
+                                  child: Text(
+                                    info.description,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Color(0xFF78350F),
+                                      fontFamily: 'Fredoka',
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                              ],
 
-                              // Row 4: Utility Buttons: TRANSFER HABITAT & SELL DOG
-                              Row(
-                                children: [
+                              // Row 4: Ownership actions are hidden on a friend visit.
+                              if (!widget.isVisitMode)
+                                Row(
+                                  children: [
                                   // TRANSFER HABITAT Button
                                   Expanded(
                                     child: HoverScale(
@@ -1240,8 +1485,8 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
                                         }
                                       },
                                       child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            vertical: 12),
+                                        padding: EdgeInsets.symmetric(
+                                            vertical: compact ? 8 : 12),
                                         decoration: BoxDecoration(
                                           gradient: const LinearGradient(
                                             colors: [
@@ -1261,24 +1506,27 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
                                             ),
                                           ],
                                         ),
-                                        child: const Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          children: [
-                                            Icon(Icons.open_with_rounded,
-                                                size: 17, color: Colors.white),
-                                            SizedBox(width: 6),
-                                            Text(
-                                              'TRANSFER HABITAT',
-                                              style: TextStyle(
-                                                color: Colors.white,
-                                                fontFamily: 'Lilita One',
-                                                fontSize: 13,
-                                                fontWeight: FontWeight.w900,
-                                                letterSpacing: 0.5,
+                                        child: const FittedBox(
+                                          fit: BoxFit.scaleDown,
+                                          child: Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: [
+                                              Icon(Icons.open_with_rounded,
+                                                  size: 17, color: Colors.white),
+                                              SizedBox(width: 6),
+                                              Text(
+                                                'TRANSFER HABITAT',
+                                                style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontFamily: 'Lilita One',
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.w900,
+                                                  letterSpacing: 0.5,
+                                                ),
                                               ),
-                                            ),
-                                          ],
+                                            ],
+                                          ),
                                         ),
                                       ),
                                     ),
@@ -1291,8 +1539,8 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
                                       scale: 1.05,
                                       onTap: _showSellConfirmModal,
                                       child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            vertical: 12),
+                                        padding: EdgeInsets.symmetric(
+                                            vertical: compact ? 8 : 12),
                                         decoration: BoxDecoration(
                                           gradient: const LinearGradient(
                                             colors: [
@@ -1313,28 +1561,31 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
                                             ),
                                           ],
                                         ),
-                                        child: Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          children: [
-                                            Image.asset(
-                                              'assets/ui/coins.png',
-                                              width: 18,
-                                              height: 18,
-                                              fit: BoxFit.contain,
-                                            ),
-                                            const SizedBox(width: 6),
-                                            const Text(
-                                              'SELL DOG',
-                                              style: TextStyle(
-                                                color: Color(0xFF3B1404),
-                                                fontFamily: 'Lilita One',
-                                                fontSize: 13,
-                                                fontWeight: FontWeight.w900,
-                                                letterSpacing: 0.5,
+                                        child: FittedBox(
+                                          fit: BoxFit.scaleDown,
+                                          child: Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: [
+                                              Image.asset(
+                                                'assets/ui/coins.png',
+                                                width: 18,
+                                                height: 18,
+                                                fit: BoxFit.contain,
                                               ),
-                                            ),
-                                          ],
+                                              const SizedBox(width: 6),
+                                              const Text(
+                                                'SELL DOG',
+                                                style: TextStyle(
+                                                  color: Color(0xFF3B1404),
+                                                  fontFamily: 'Lilita One',
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.w900,
+                                                  letterSpacing: 0.5,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
                                         ),
                                       ),
                                     ),
@@ -1343,60 +1594,17 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
                               ),
                             ],
                           ),
-                        ),
-                  ),
-              ],
-            ),
-          ),
-        ),
-      ),
-
-          // ── 4. Toast Notification Overlay ──
-          if (_toastMessage != null)
-            Positioned(
-              top: 76,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: const Color(0xEE1E0A02),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: const Color(0xFFFBBF24), width: 1.5),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0x66000000),
-                        blurRadius: 10,
-                        offset: Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Text(
-                    _toastMessage!,
-                    style: const TextStyle(
-                      color: Color(0xFFFEF08A),
-                      fontFamily: 'Lilita One',
-                      fontSize: 12,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
+                        );
   }
 
   Widget _buildWoodResourcePill({
     required String iconAsset,
     required String value,
     required VoidCallback onPlus,
+    double pillW = 138.0,
+    double pillH = 44.0,
   }) {
-    const double pillH = 44.0;
-    const double pillW = 138.0;
+    final double iconSize = (pillH * 0.50).clamp(16.0, 24.0);
 
     return HoverScale(
       scale: 1.05,
@@ -1415,10 +1623,10 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
               ),
             ),
             Positioned(
-              left: pillW * 0.19 - 11,
-              top: pillH * 0.50 - 11,
-              width: 22,
-              height: 22,
+              left: pillW * 0.19 - iconSize / 2,
+              top: pillH * 0.50 - iconSize / 2,
+              width: iconSize,
+              height: iconSize,
               child: Image.asset(
                 iconAsset,
                 fit: BoxFit.contain,

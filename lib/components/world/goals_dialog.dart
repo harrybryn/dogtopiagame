@@ -104,7 +104,9 @@ class GoalsDialog extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 2),
-                      Row(
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 2,
                         children: [
                           Text(
                             '+${task.coinReward} Coins',
@@ -115,7 +117,6 @@ class GoalsDialog extends StatelessWidget {
                               fontSize: 11,
                             ),
                           ),
-                          const SizedBox(width: 8),
                           Text(
                             '+${task.xpReward} XP',
                             style: const TextStyle(

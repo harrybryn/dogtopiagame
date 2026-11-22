@@ -85,7 +85,7 @@ class CollectionBookPage extends StatelessWidget {
                   ElevatedButton.icon(
                     onPressed: onBackToWorld,
                     icon: const Icon(Icons.arrow_back, size: 18),
-                    label: const Text('Back to Island View',
+                    label: Text(MediaQuery.of(context).size.width < 420 ? 'Back' : 'Back to Island View', overflow: TextOverflow.ellipsis,
                         style: TextStyle(fontWeight: FontWeight.bold)),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xDD2A1106),

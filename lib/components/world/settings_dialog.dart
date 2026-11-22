@@ -103,6 +103,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
     return GenericModal(
       title: 'SETTINGS',
       maxWidth: 580,
+      scrollable: true,
       onClose: () => Navigator.of(context).pop(),
       child: SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
@@ -288,9 +289,11 @@ class _SettingsDialogState extends State<SettingsDialog> {
           // ── Top Row: Keeper Avatar, Username, Edit & Save Now ──
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-            child: Row(
-              children: [
-                Container(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final compact = constraints.maxWidth < 360;
+
+                final avatar = Container(
                   width: 38,
                   height: 38,
                   decoration: BoxDecoration(
@@ -300,65 +303,69 @@ class _SettingsDialogState extends State<SettingsDialog> {
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                     ),
-                    border: Border.all(color: const Color(0xFF78350F), width: 1.8),
+                    border:
+                        Border.all(color: const Color(0xFF78350F), width: 1.8),
                   ),
                   child: const Icon(Icons.pets_rounded,
                       color: Color(0xFF3B1404), size: 20),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(
-                        children: [
-                          Flexible(
-                            child: Text(
-                              name,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Color(0xFF3B1404),
-                                fontFamily: 'Lilita One',
-                                fontSize: 16,
-                              ),
+                );
+
+                final identity = Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Color(0xFF3B1404),
+                              fontFamily: 'Lilita One',
+                              fontSize: 16,
                             ),
                           ),
-                          const SizedBox(width: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 1),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFFEF3C7),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                  color: const Color(0xFFD97706), width: 1),
-                            ),
-                            child: Text(
-                              'LVL ${widget.game.level}',
-                              style: const TextStyle(
-                                color: Color(0xFF92400E),
-                                fontFamily: 'Lilita One',
-                                fontSize: 10,
-                              ),
+                        ),
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF3C7),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                                color: const Color(0xFFD97706), width: 1),
+                          ),
+                          child: Text(
+                            'LVL ${widget.game.level}',
+                            style: const TextStyle(
+                              color: Color(0xFF92400E),
+                              fontFamily: 'Lilita One',
+                              fontSize: 10,
                             ),
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 2),
-                      Row(
-                        children: [
-                          Container(
-                            width: 7,
-                            height: 7,
-                            decoration: const BoxDecoration(
-                              color: Color(0xFF10B981),
-                              shape: BoxShape.circle,
-                            ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        Container(
+                          width: 7,
+                          height: 7,
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF10B981),
+                            shape: BoxShape.circle,
                           ),
-                          const SizedBox(width: 5),
-                          const Text(
+                        ),
+                        const SizedBox(width: 5),
+                        const Flexible(
+                          child: Text(
                             'Auto-saved locally on this device',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               color: Color(0xFF047857),
                               fontFamily: 'Fredoka',
@@ -366,15 +373,17 @@ class _SettingsDialogState extends State<SettingsDialog> {
                               fontSize: 11,
                             ),
                           ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                HoverScale(
+                        ),
+                      ],
+                    ),
+                  ],
+                );
+
+                final editButton = HoverScale(
                   scale: 1.06,
                   onTap: _openEditUsernameDialog,
                   child: Container(
+                    alignment: Alignment.center,
                     padding:
                         const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(
@@ -392,12 +401,13 @@ class _SettingsDialogState extends State<SettingsDialog> {
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 6),
-                HoverScale(
+                );
+
+                final saveButton = HoverScale(
                   scale: 1.06,
                   onTap: _handleManualSave,
                   child: Container(
+                    alignment: Alignment.center,
                     padding:
                         const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
                     decoration: BoxDecoration(
@@ -421,8 +431,43 @@ class _SettingsDialogState extends State<SettingsDialog> {
                       ),
                     ),
                   ),
-                ),
-              ],
+                );
+
+                if (!compact) {
+                  return Row(
+                    children: [
+                      avatar,
+                      const SizedBox(width: 10),
+                      Expanded(child: identity),
+                      editButton,
+                      const SizedBox(width: 6),
+                      saveButton,
+                    ],
+                  );
+                }
+
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        avatar,
+                        const SizedBox(width: 10),
+                        Expanded(child: identity),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(child: editButton),
+                        const SizedBox(width: 6),
+                        Expanded(child: saveButton),
+                      ],
+                    ),
+                  ],
+                );
+              },
             ),
           ),
 
@@ -522,14 +567,20 @@ class _SettingsDialogState extends State<SettingsDialog> {
                           child: CustomPaint(painter: _GoogleLogoPainter()),
                         ),
                         const SizedBox(width: 11),
-                        const Text(
-                          'Connect with Google',
-                          style: TextStyle(
-                            color: Color(0xFF1F2937),
-                            fontFamily: 'Fredoka',
-                            fontWeight: FontWeight.w800,
-                            fontSize: 14.5,
-                            letterSpacing: 0.2,
+                        const Flexible(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              'Connect with Google',
+                              maxLines: 1,
+                              style: TextStyle(
+                                color: Color(0xFF1F2937),
+                                fontFamily: 'Fredoka',
+                                fontWeight: FontWeight.w800,
+                                fontSize: 14.5,
+                                letterSpacing: 0.2,
+                              ),
+                            ),
                           ),
                         ),
                         const SizedBox(width: 10),
@@ -584,27 +635,34 @@ class _SettingsDialogState extends State<SettingsDialog> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Image.asset(
-                'assets/ui/DogWizard.png',
-                width: 26,
-                height: 26,
-                fit: BoxFit.contain,
+          Expanded(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Image.asset(
+                    'assets/ui/DogWizard.png',
+                    width: 26,
+                    height: 26,
+                    fit: BoxFit.contain,
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Dog Wizard Tutorial',
+                    style: TextStyle(
+                      color: Color(0xFF3B1404),
+                      fontFamily: 'Lilita One',
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 8),
-              const Text(
-                'Dog Wizard Tutorial',
-                style: TextStyle(
-                  color: Color(0xFF3B1404),
-                  fontFamily: 'Lilita One',
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-            ],
+            ),
           ),
+          const SizedBox(width: 8),
           HoverScale(
             scale: 1.06,
             onTap: () {
@@ -683,22 +741,29 @@ class _SettingsDialogState extends State<SettingsDialog> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(icon, color: const Color(0xFFB45309), size: 20),
-                    const SizedBox(width: 8),
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        color: Color(0xFF3B1404),
-                        fontFamily: 'Lilita One',
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w900,
-                      ),
+                Expanded(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(icon, color: const Color(0xFFB45309), size: 20),
+                        const SizedBox(width: 8),
+                        Text(
+                          title,
+                          style: const TextStyle(
+                            color: Color(0xFF3B1404),
+                            fontFamily: 'Lilita One',
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
+                const SizedBox(width: 8),
                 HoverScale(
                   scale: 1.06,
                   onTap: onToggle,

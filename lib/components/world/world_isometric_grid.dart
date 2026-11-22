@@ -292,7 +292,7 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
           // ── Background Island Surface (LandSurface.webp) ──
           Positioned.fill(
             child: Image.asset(
-              'assets/ui/LandSurface.webp',
+              'assets/ui/LandSurface.png',
               fit: BoxFit.cover,
               filterQuality: FilterQuality.high,
             ),

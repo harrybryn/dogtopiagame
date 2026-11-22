@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'state/game_controller.dart';
 import 'services/audio_service.dart';
 import 'services/local_save_service.dart';
@@ -11,10 +12,29 @@ import 'pages/habitat_care_page.dart';
 import 'pages/dog_factory_inside_page.dart';
 import 'pages/breeding_page.dart';
 import 'pages/collection_book_page.dart';
+import 'pages/friend_visit_page.dart';
+import 'models/friend_visit_model.dart';
 import 'models/habitat_model.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await _enterLandscape();
   runApp(const DogtopiaApp());
+}
+
+/// Dogtopia is designed for landscape play. Lock phones/tablets to landscape
+/// and use the full screen so the HUD never has to squeeze into portrait.
+/// Web and desktop do not support this and simply keep their window size.
+Future<void> _enterLandscape() async {
+  try {
+    await SystemChrome.setPreferredOrientations(const [
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+  } catch (_) {
+    // Orientation locking is unavailable on some platforms (e.g. desktop/web).
+  }
 }
 
 class DogtopiaApp extends StatelessWidget {
@@ -55,6 +75,7 @@ class DogtopiaRoot extends StatefulWidget {
 class _DogtopiaRootState extends State<DogtopiaRoot>
     with WidgetsBindingObserver {
   final GameController _game = GameController();
+  final MockFriend _mockFriend = MockFriend.sample();
   final ValueNotifier<Rect?> _walkthroughWorldTargetRect = ValueNotifier<Rect?>(
     null,
   );
@@ -220,6 +241,37 @@ class _DogtopiaRootState extends State<DogtopiaRoot>
             case 'collection':
               activePage = CollectionBookPage(
                 onBackToWorld: () => _navigateTo('world'),
+              );
+              break;
+
+            case 'friend_visit':
+              final friend =
+                  _routeArgs['friend'] as MockFriend? ?? _mockFriend;
+              activePage = FriendVisitPage(
+                game: _game,
+                friend: friend,
+                onBackToWorld: () => _navigateTo('world'),
+                onOpenHabitat: (habitat) => _navigateTo(
+                  'friend_habitat',
+                  args: {'habitat': habitat, 'friend': friend},
+                ),
+              );
+              break;
+
+            case 'friend_habitat':
+              final friend =
+                  _routeArgs['friend'] as MockFriend? ?? _mockFriend;
+              final habitat = _routeArgs['habitat'] as HabitatModel? ??
+                  friend.habitats.first;
+              activePage = HabitatCarePage(
+                game: _game,
+                habitat: habitat,
+                isVisitMode: true,
+                visitFriend: friend,
+                onBackToWorld: () => _navigateTo(
+                  'friend_visit',
+                  args: {'friend': friend},
+                ),
               );
               break;
 

@@ -63,6 +63,104 @@ class _SocialDialogState extends State<SocialDialog> {
     });
   }
 
+  Widget _buildVisitButton() {
+    return HoverScale(
+      scale: 1.06,
+      onTap: () => widget.onVisit?.call(),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF22C55E), Color(0xFF15803D)],
+          ),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: const Color(0xFFBBF7D0)),
+        ),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.visibility, size: 13, color: Colors.white),
+              const SizedBox(width: 4),
+              Text(
+                'VISIT ISLAND',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontFamily: 'Lilita One',
+                  fontSize: 10,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGiftSentButton() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFFE5E7EB),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFF9CA3AF)),
+      ),
+      child: const Center(
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            'GIFT SENT',
+            style: TextStyle(
+              color: Color(0xFF4B5563),
+              fontFamily: 'Lilita One',
+              fontSize: 10,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGiftButton(int id, String name) {
+    return HoverScale(
+      scale: 1.06,
+      onTap: () => _sendGift(id, name),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFFFBBF24), Color(0xFFD97706)],
+          ),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: const Color(0xFFFEF3C7)),
+        ),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.card_giftcard,
+                  size: 13, color: Color(0xFF3B1404)),
+              const SizedBox(width: 4),
+              Text(
+                'SEND GIFT',
+                style: TextStyle(
+                  color: const Color(0xFF3B1404),
+                  fontFamily: 'Lilita One',
+                  fontSize: 10,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return GenericModal(
@@ -180,63 +278,27 @@ class _SocialDialogState extends State<SocialDialog> {
                         ),
                       ),
 
-                      // Action Button
-                      if (isGifted)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFE5E7EB),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: const Color(0xFF9CA3AF)),
-                          ),
-                          child: const Text(
-                            'GIFT SENT',
-                            style: TextStyle(
-                              color: Color(0xFF4B5563),
-                              fontFamily: 'Lilita One',
-                              fontSize: 11,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                        )
-                      else
-                        HoverScale(
-                          scale: 1.08,
-                          onTap: () => _sendGift(friend['id'] as int, friend['name'] as String),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                colors: [Color(0xFFFBBF24), Color(0xFFD97706)],
+                      // Actions
+                      SizedBox(
+                        width: widget.onVisit != null && friend['id'] == 1
+                            ? 118
+                            : 108,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (widget.onVisit != null && friend['id'] == 1)
+                              _buildVisitButton(),
+                            if (isGifted)
+                              _buildGiftSentButton()
+                            else
+                              _buildGiftButton(
+                                friend['id'] as int,
+                                friend['name'] as String,
                               ),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: const Color(0xFFFEF3C7)),
-                              boxShadow: const [
-                                BoxShadow(
-                                  color: Color(0x33000000),
-                                  offset: Offset(0, 2),
-                                  blurRadius: 4,
-                                ),
-                              ],
-                            ),
-                            child: const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.card_giftcard, size: 14, color: Color(0xFF3B1404)),
-                                SizedBox(width: 4),
-                                Text(
-                                  'SEND GIFT',
-                                  style: TextStyle(
-                                    color: Color(0xFF3B1404),
-                                    fontFamily: 'Lilita One',
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w900,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
+                          ],
                         ),
+                      ),
                     ],
                   ),
                 );

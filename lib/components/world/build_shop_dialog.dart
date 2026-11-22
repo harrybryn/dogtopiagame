@@ -72,19 +72,30 @@ class _BuildShopDialogState extends State<BuildShopDialog> {
   @override
   Widget build(BuildContext context) {
     final screenSize = MediaQuery.of(context).size;
-    // Exactly matching React max-w-5xl (1024px) aspect 3:2 and max-h-[92vh]
-    final double maxModalW = (screenSize.width - 32.0).clamp(320.0, 1024.0);
-    final double maxModalH = (screenSize.height * 0.92).clamp(240.0, 682.0);
+    final compact = _isCompact(screenSize);
+    // Keep the original 3:2 frame on large screens, but let small landscape
+    // windows use the full available height so the cards have room for art
+    // and details.
+    final double maxModalW =
+        (screenSize.width - (compact ? 12.0 : 32.0)).clamp(320.0, 1024.0);
+    final double maxModalH =
+        (screenSize.height * (compact ? 0.96 : 0.92)).clamp(240.0, 682.0);
     double modalW = maxModalW;
-    double modalH = modalW * (2.0 / 3.0);
-    if (modalH > maxModalH) {
-      modalH = maxModalH;
-      modalW = modalH * (3.0 / 2.0);
+    double modalH = maxModalH;
+    if (!compact) {
+      modalH = modalW * (2.0 / 3.0);
+      if (modalH > maxModalH) {
+        modalH = maxModalH;
+        modalW = modalH * (3.0 / 2.0);
+      }
     }
 
     return Dialog(
       backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: compact ? 6 : 16,
+        vertical: compact ? 4 : 12,
+      ),
       child: Center(
         child: SizedBox(
           width: modalW,
@@ -156,6 +167,7 @@ class _BuildShopDialogState extends State<BuildShopDialog> {
 
               // ── 4. Main Parchment Board Area (Padded to fit perfectly inside wooden frame) ──
               Positioned(
+                // Keep the content inside the wooden frame's parchment area.
                 left: modalW * 0.12,
                 right: modalW * 0.12,
                 top: modalH * 0.245,
@@ -167,16 +179,17 @@ class _BuildShopDialogState extends State<BuildShopDialog> {
                       // Subcategory Top Bar (Back button + Habitat tabs)
                       if (_activeTab != 'categories') ...[
                         Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
+                          padding: EdgeInsets.only(bottom: compact ? 4 : 8),
                           child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
                               HoverScale(
                                 scale: 1.05,
                                 onTap: () => setState(() => _activeTab = 'categories'),
                                 child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 12, vertical: 5),
+                                  padding: EdgeInsets.symmetric(
+                                      horizontal: compact ? 8 : 12,
+                                      vertical: compact ? 3 : 5),
                                   decoration: BoxDecoration(
                                     gradient: const LinearGradient(
                                       colors: [Color(0xFFFEF08A), Color(0xFFF59E0B)],
@@ -194,18 +207,18 @@ class _BuildShopDialogState extends State<BuildShopDialog> {
                                       ),
                                     ],
                                   ),
-                                  child: const Row(
+                                  child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Icon(Icons.arrow_back,
+                                      const Icon(Icons.arrow_back,
                                           size: 14, color: Color(0xFF3B1404)),
-                                      SizedBox(width: 4),
+                                      SizedBox(width: compact ? 2 : 4),
                                       Text(
                                         'CATEGORIES',
                                         style: TextStyle(
-                                          color: Color(0xFF3B1404),
+                                          color: const Color(0xFF3B1404),
                                           fontFamily: 'Lilita One',
-                                          fontSize: 12,
+                                          fontSize: compact ? 10 : 12,
                                           fontWeight: FontWeight.w900,
                                         ),
                                       ),
@@ -216,35 +229,45 @@ class _BuildShopDialogState extends State<BuildShopDialog> {
 
                               // Currency tabs when in diamonds category
                               if (_activeTab == 'diamonds')
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    _buildCurrencyFilterTab('diamonds', 'DIAMONDS (₱)'),
-                                    _buildCurrencyFilterTab('coins_real', 'GOLD (₱)'),
-                                    _buildCurrencyFilterTab('coins', 'CONVERT (💎)'),
-                                  ],
+                                Flexible(
+                                  child: SingleChildScrollView(
+                                    scrollDirection: Axis.horizontal,
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        _buildCurrencyFilterTab('diamonds', 'DIAMONDS (₱)'),
+                                        _buildCurrencyFilterTab('coins_real', 'GOLD (₱)'),
+                                        _buildCurrencyFilterTab('coins', 'CONVERT (💎)'),
+                                      ],
+                                    ),
+                                  ),
                                 ),
 
                               // Dog Habitat tabs
                               if (_activeTab == 'dogs')
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    _buildFilterTab('all', 'ALL'),
-                                    _buildFilterTab('garden', 'GARDEN'),
-                                    _buildFilterTab('desert', 'DESERT'),
-                                    _buildFilterTab('snow', 'SNOW'),
-                                    _buildFilterTab('forest', 'FOREST'),
-                                    _buildFilterTab('beach', 'BEACH'),
-                                    _buildFilterTab('legendary', 'LEGEND'),
-                                  ],
+                                Flexible(
+                                  child: SingleChildScrollView(
+                                    scrollDirection: Axis.horizontal,
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        _buildFilterTab('all', 'ALL'),
+                                        _buildFilterTab('garden', 'GARDEN'),
+                                        _buildFilterTab('desert', 'DESERT'),
+                                        _buildFilterTab('snow', 'SNOW'),
+                                        _buildFilterTab('forest', 'FOREST'),
+                                        _buildFilterTab('beach', 'BEACH'),
+                                        _buildFilterTab('legendary', 'LEGEND'),
+                                      ],
+                                    ),
+                                  ),
                                 ),
                             ],
                           ),
                         ),
                       ] else ...[
                         // Matching height spacer so Categories panel is the exact same size as other panels
-                        const SizedBox(height: 36),
+                        SizedBox(height: compact ? 10 : 36),
                       ],
 
                       // Toast notification
@@ -281,6 +304,21 @@ class _BuildShopDialogState extends State<BuildShopDialog> {
         ),
       ),
     );
+  }
+
+  bool _isCompact(Size size) => size.width < 880 || size.height < 560;
+
+  double _shopGridSpacing(bool compact) => compact ? 8.0 : 10.0;
+  double _shopGridPadding(bool compact) => compact ? 4.0 : 8.0;
+
+  /// Card ratio must account for the grid's padding, otherwise hover scaling
+  /// pushes the cards past the parchment area of the shop background.
+  double _shopGridRatio(BoxConstraints constraints, bool compact) {
+    final spacing = _shopGridSpacing(compact);
+    final padding = _shopGridPadding(compact);
+    final cardW = (constraints.maxWidth - padding * 2 - spacing * 2) / 3;
+    final cardH = (constraints.maxHeight - padding * 2 - spacing) / 2;
+    return cardW / cardH;
   }
 
   Widget _buildCurrencyFilterTab(String id, String label) {
@@ -418,12 +456,17 @@ class _BuildShopDialogState extends State<BuildShopDialog> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        const double spacing = 10.0;
-        final double cardW = (constraints.maxWidth - spacing * 2) / 3;
-        final double cardH = (constraints.maxHeight - spacing) / 2;
-        final double ratio = cardW / cardH;
+        final compact = _isCompact(MediaQuery.of(context).size);
+        final spacing = _shopGridSpacing(compact);
+        final padding = _shopGridPadding(compact);
+        final ratio = _shopGridRatio(constraints, compact);
+        final cardW =
+            (constraints.maxWidth - padding * 2 - spacing * 2) / 3;
+        final titleSize = compact ? (cardW < 120 ? 8.5 : 9.5) : 13.5;
+        final descSize = compact ? (cardW < 120 ? 7.5 : 8.5) : 10.5;
 
         return GridView.builder(
+          padding: EdgeInsets.all(padding),
           physics: const NeverScrollableScrollPhysics(),
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 3,
@@ -439,7 +482,10 @@ class _BuildShopDialogState extends State<BuildShopDialog> {
               scale: 1.04,
               onTap: () => setState(() => _activeTab = cat['id'] as String),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                padding: EdgeInsets.symmetric(
+                  horizontal: compact ? 5 : 10,
+                  vertical: compact ? 3 : 8,
+                ),
                 decoration: BoxDecoration(
                   gradient: const RadialGradient(
                     center: Alignment(0, -0.4),
@@ -450,7 +496,7 @@ class _BuildShopDialogState extends State<BuildShopDialog> {
                       Color(0xFFFDE6BA),
                     ],
                   ),
-                  borderRadius: BorderRadius.circular(18),
+                  borderRadius: BorderRadius.circular(compact ? 12 : 18),
                   border: Border.all(color: const Color(0xFFD97706), width: 2.0),
                   boxShadow: const [
                     BoxShadow(
@@ -465,15 +511,18 @@ class _BuildShopDialogState extends State<BuildShopDialog> {
                   children: [
                     // Representative Game Asset
                     Expanded(
-                      child: Center(
-                        child: Image.asset(
-                          cat['image'] as String,
-                          fit: BoxFit.contain,
-                          filterQuality: FilterQuality.high,
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(vertical: compact ? 0 : 3),
+                        child: SizedBox.expand(
+                          child: Image.asset(
+                            cat['image'] as String,
+                            fit: BoxFit.contain,
+                            filterQuality: FilterQuality.high,
+                          ),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    SizedBox(height: compact ? 1 : 4),
 
                     // Title
                     Text(
@@ -481,12 +530,12 @@ class _BuildShopDialogState extends State<BuildShopDialog> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: Color(0xFF451A03),
+                      style: TextStyle(
+                        color: const Color(0xFF451A03),
                         fontFamily: 'Lilita One',
-                        fontSize: 13.5,
+                        fontSize: titleSize,
                         fontWeight: FontWeight.w900,
-                        letterSpacing: 0.3,
+                        letterSpacing: compact ? 0 : 0.3,
                       ),
                     ),
 
@@ -496,18 +545,21 @@ class _BuildShopDialogState extends State<BuildShopDialog> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: Color(0xFF78350F),
+                      style: TextStyle(
+                        color: const Color(0xFF78350F),
                         fontFamily: 'Fredoka',
-                        fontSize: 10.5,
+                        fontSize: descSize,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    const SizedBox(height: 6),
+                    SizedBox(height: compact ? 2 : 6),
 
                     // Action Pill: "EXPLORE"
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 3),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: compact ? 8 : 14,
+                        vertical: compact ? 1 : 3,
+                      ),
                       decoration: BoxDecoration(
                         gradient: const LinearGradient(
                           colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
@@ -523,14 +575,14 @@ class _BuildShopDialogState extends State<BuildShopDialog> {
                           ),
                         ],
                       ),
-                      child: const Text(
+                      child: Text(
                         'EXPLORE',
                         style: TextStyle(
                           color: Colors.white,
                           fontFamily: 'Lilita One',
-                          fontSize: 9.5,
+                          fontSize: compact ? 8 : 9.5,
                           fontWeight: FontWeight.w900,
-                          letterSpacing: 0.5,
+                          letterSpacing: compact ? 0 : 0.5,
                         ),
                       ),
                     ),
@@ -550,12 +602,13 @@ class _BuildShopDialogState extends State<BuildShopDialog> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        const double spacing = 10.0;
-        final double cardW = (constraints.maxWidth - spacing * 2) / 3;
-        final double cardH = (constraints.maxHeight - spacing) / 2;
-        final double ratio = cardW / cardH;
+        final compact = _isCompact(MediaQuery.of(context).size);
+        final spacing = _shopGridSpacing(compact);
+        final padding = _shopGridPadding(compact);
+        final ratio = _shopGridRatio(constraints, compact);
 
         return GridView.builder(
+          padding: EdgeInsets.all(padding),
           physics: habitats.length > 6
               ? const BouncingScrollPhysics()
               : const NeverScrollableScrollPhysics(),
@@ -608,12 +661,13 @@ class _BuildShopDialogState extends State<BuildShopDialog> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        const double spacing = 10.0;
-        final double cardW = (constraints.maxWidth - spacing * 2) / 3;
-        final double cardH = (constraints.maxHeight - spacing) / 2;
-        final double ratio = cardW / cardH;
+        final compact = _isCompact(MediaQuery.of(context).size);
+        final spacing = _shopGridSpacing(compact);
+        final padding = _shopGridPadding(compact);
+        final ratio = _shopGridRatio(constraints, compact);
 
         return GridView.builder(
+          padding: EdgeInsets.all(padding),
           physics: dogs.length > 6
               ? const BouncingScrollPhysics()
               : const NeverScrollableScrollPhysics(),
@@ -696,12 +750,13 @@ class _BuildShopDialogState extends State<BuildShopDialog> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        const double spacing = 10.0;
-        final double cardW = (constraints.maxWidth - spacing * 2) / 3;
-        final double cardH = (constraints.maxHeight - spacing) / 2;
-        final double ratio = cardW / cardH;
+        final compact = _isCompact(MediaQuery.of(context).size);
+        final spacing = _shopGridSpacing(compact);
+        final padding = _shopGridPadding(compact);
+        final ratio = _shopGridRatio(constraints, compact);
 
         return GridView.builder(
+          padding: EdgeInsets.all(padding),
           physics: facilities.length > 6
               ? const BouncingScrollPhysics()
               : const NeverScrollableScrollPhysics(),
@@ -745,12 +800,13 @@ class _BuildShopDialogState extends State<BuildShopDialog> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        const double spacing = 10.0;
-        final double cardW = (constraints.maxWidth - spacing * 2) / 3;
-        final double cardH = (constraints.maxHeight - spacing) / 2;
-        final double ratio = cardW / cardH;
+        final compact = _isCompact(MediaQuery.of(context).size);
+        final spacing = _shopGridSpacing(compact);
+        final padding = _shopGridPadding(compact);
+        final ratio = _shopGridRatio(constraints, compact);
 
         return GridView.builder(
+          padding: EdgeInsets.all(padding),
           physics: decor.length > 6
               ? const BouncingScrollPhysics()
               : const NeverScrollableScrollPhysics(),
@@ -855,12 +911,13 @@ class _BuildShopDialogState extends State<BuildShopDialog> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        const double spacing = 10.0;
-        final double cardW = (constraints.maxWidth - spacing * 2) / 3;
-        final double cardH = (constraints.maxHeight - spacing) / 2;
-        final double ratio = cardW / cardH;
+        final compact = _isCompact(MediaQuery.of(context).size);
+        final spacing = _shopGridSpacing(compact);
+        final padding = _shopGridPadding(compact);
+        final ratio = _shopGridRatio(constraints, compact);
 
         return GridView.builder(
+          padding: EdgeInsets.all(padding),
           physics: const NeverScrollableScrollPhysics(),
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 3,
@@ -922,12 +979,13 @@ class _BuildShopDialogState extends State<BuildShopDialog> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        const double spacing = 10.0;
-        final double cardW = (constraints.maxWidth - spacing * 2) / 3;
-        final double cardH = (constraints.maxHeight - spacing) / 2;
-        final double ratio = cardW / cardH;
+        final compact = _isCompact(MediaQuery.of(context).size);
+        final spacing = _shopGridSpacing(compact);
+        final padding = _shopGridPadding(compact);
+        final ratio = _shopGridRatio(constraints, compact);
 
         return GridView.builder(
+          padding: EdgeInsets.all(padding),
           physics: const NeverScrollableScrollPhysics(),
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 3,
@@ -1109,12 +1167,13 @@ class _BuildShopDialogState extends State<BuildShopDialog> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        const double spacing = 10.0;
-        final double cardW = (constraints.maxWidth - spacing * 2) / 3;
-        final double cardH = (constraints.maxHeight - spacing) / 2;
-        final double ratio = cardW / cardH;
+        final compact = _isCompact(MediaQuery.of(context).size);
+        final spacing = _shopGridSpacing(compact);
+        final padding = _shopGridPadding(compact);
+        final ratio = _shopGridRatio(constraints, compact);
 
         return GridView.builder(
+          padding: EdgeInsets.all(padding),
           physics: const NeverScrollableScrollPhysics(),
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 3,
@@ -1294,12 +1353,13 @@ class _BuildShopDialogState extends State<BuildShopDialog> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        const double spacing = 10.0;
-        final double cardW = (constraints.maxWidth - spacing * 2) / 3;
-        final double cardH = (constraints.maxHeight - spacing) / 2;
-        final double ratio = cardW / cardH;
+        final compact = _isCompact(MediaQuery.of(context).size);
+        final spacing = _shopGridSpacing(compact);
+        final padding = _shopGridPadding(compact);
+        final ratio = _shopGridRatio(constraints, compact);
 
         return GridView.builder(
+          padding: EdgeInsets.all(padding),
           physics: const NeverScrollableScrollPhysics(),
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 3,
@@ -1502,6 +1562,7 @@ class _BuildShopDialogState extends State<BuildShopDialog> {
     required VoidCallback onBuy,
     VoidCallback? onTapLocked,
   }) {
+    final compact = _isCompact(MediaQuery.of(context).size);
     return Container(
       decoration: BoxDecoration(
         gradient: isUnlocked
@@ -1539,21 +1600,27 @@ class _BuildShopDialogState extends State<BuildShopDialog> {
         ],
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        padding: EdgeInsets.symmetric(
+          horizontal: compact ? 5 : 8,
+          vertical: compact ? 3 : 6,
+        ),
         child: Column(
           children: [
             // Graphic Image with subtle lock overlay when locked
             Expanded(
-              child: Center(
+              child: Padding(
+                padding: EdgeInsets.all(compact ? 0 : 4),
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
-                    Opacity(
-                      opacity: isUnlocked ? 1.0 : 0.65,
-                      child: Image.asset(
-                        image,
-                        fit: BoxFit.contain,
-                        filterQuality: FilterQuality.high,
+                    SizedBox.expand(
+                      child: Opacity(
+                        opacity: isUnlocked ? 1.0 : 0.65,
+                        child: Image.asset(
+                          image,
+                          fit: BoxFit.contain,
+                          filterQuality: FilterQuality.high,
+                        ),
                       ),
                     ),
                     if (!isUnlocked)
@@ -1572,17 +1639,17 @@ class _BuildShopDialogState extends State<BuildShopDialog> {
                             ),
                           ],
                         ),
-                        child: const Icon(
+                        child: Icon(
                           Icons.lock_rounded,
-                          size: 18,
-                          color: Color(0xFFFBBF24),
+                          size: compact ? 14 : 18,
+                          color: const Color(0xFFFBBF24),
                         ),
                       ),
                   ],
                 ),
               ),
             ),
-            const SizedBox(height: 2),
+            SizedBox(height: compact ? 1 : 2),
 
             // Item Name
             Text(
@@ -1595,9 +1662,9 @@ class _BuildShopDialogState extends State<BuildShopDialog> {
                     ? const Color(0xFF451A03)
                     : const Color(0xFF5A4D3E),
                 fontFamily: 'Lilita One',
-                fontSize: 13,
+                fontSize: compact ? 9 : 13,
                 fontWeight: FontWeight.w900,
-                letterSpacing: 0.2,
+                letterSpacing: compact ? 0 : 0.2,
               ),
             ),
 
@@ -1612,11 +1679,11 @@ class _BuildShopDialogState extends State<BuildShopDialog> {
                     ? const Color(0xFFB45309)
                     : const Color(0xFF786C5F),
                 fontFamily: 'Fredoka',
-                fontSize: 10,
+                fontSize: compact ? 7 : 10,
                 fontWeight: FontWeight.w600,
               ),
             ),
-            const SizedBox(height: 5),
+            SizedBox(height: compact ? 2 : 5),
 
             // Button or Level Lock
             if (!isUnlocked)
@@ -1624,30 +1691,36 @@ class _BuildShopDialogState extends State<BuildShopDialog> {
                 scale: 1.05,
                 onTap: onTapLocked,
                 child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: compact ? 6 : 10,
+                    vertical: compact ? 2 : 4,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0xFF786C5F),
                     borderRadius: BorderRadius.circular(10),
                     border:
                         Border.all(color: const Color(0xFF9CA3AF), width: 1.2),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.lock, size: 11, color: Colors.white),
-                      const SizedBox(width: 4),
-                      Text(
-                        'LVL $requiredLevel REQUIRED',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontFamily: 'Lilita One',
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 0.3,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.lock,
+                            size: compact ? 9 : 11, color: Colors.white),
+                        SizedBox(width: compact ? 2 : 4),
+                        Text(
+                          'LVL $requiredLevel REQUIRED',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontFamily: 'Lilita One',
+                            fontSize: compact ? 8 : 9.5,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 0.3,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               )
@@ -1656,7 +1729,10 @@ class _BuildShopDialogState extends State<BuildShopDialog> {
                 scale: 1.06,
                 onTap: canAfford ? onBuy : null,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: compact ? 7 : 12,
+                    vertical: compact ? 2 : 4,
+                  ),
                   decoration: BoxDecoration(
                     gradient: canAfford
                         ? const LinearGradient(
@@ -1686,14 +1762,16 @@ class _BuildShopDialogState extends State<BuildShopDialog> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       if (costCoins > 0) ...[
-                        Image.asset('assets/ui/coins.png', width: 13, height: 13),
-                        const SizedBox(width: 4),
+                        Image.asset('assets/ui/coins.png',
+                            width: compact ? 11 : 13,
+                            height: compact ? 11 : 13),
+                        SizedBox(width: compact ? 3 : 4),
                         Text(
                           _fmt(costCoins),
-                          style: const TextStyle(
-                            color: Color(0xFF3B1404),
+                          style: TextStyle(
+                            color: const Color(0xFF3B1404),
                             fontFamily: 'Lilita One',
-                            fontSize: 11,
+                            fontSize: compact ? 9.5 : 11,
                             fontWeight: FontWeight.w900,
                           ),
                         ),
@@ -1701,25 +1779,26 @@ class _BuildShopDialogState extends State<BuildShopDialog> {
                       if (costDiamonds > 0) ...[
                         if (costCoins > 0) const SizedBox(width: 5),
                         Image.asset('assets/ui/diamonds.png',
-                            width: 13, height: 13),
-                        const SizedBox(width: 4),
+                            width: compact ? 11 : 13,
+                            height: compact ? 11 : 13),
+                        SizedBox(width: compact ? 3 : 4),
                         Text(
                           '$costDiamonds',
-                          style: const TextStyle(
-                            color: Color(0xFF3B1404),
+                          style: TextStyle(
+                            color: const Color(0xFF3B1404),
                             fontFamily: 'Lilita One',
-                            fontSize: 11,
+                            fontSize: compact ? 9.5 : 11,
                             fontWeight: FontWeight.w900,
                           ),
                         ),
                       ],
                       if (costCoins == 0 && costDiamonds == 0)
-                        const Text(
+                        Text(
                           'FREE',
                           style: TextStyle(
-                            color: Color(0xFF3B1404),
+                            color: const Color(0xFF3B1404),
                             fontFamily: 'Lilita One',
-                            fontSize: 11,
+                            fontSize: compact ? 9.5 : 11,
                             fontWeight: FontWeight.w900,
                           ),
                         ),

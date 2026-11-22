@@ -65,9 +65,42 @@ class WorldHUD extends StatelessWidget {
     final selectedHab = game.selectedHabitat;
     final xpPercent = ((game.xp / game.maxXp) * 100).clamp(4.0, 100.0);
 
-    // Enlarged XP bar dimensions (ratio 866/288 ~3.007) matching React & Shop scale
-    const double xpBarH = 114.0;
-    const double xpBarW = xpBarH * (866.0 / 288.0); // ~342.8px
+    final media = MediaQuery.of(context);
+    final screenW = media.size.width;
+    final screenH = media.size.height;
+    final isCompact = screenW < 880;
+    final isShort = screenH < 620;
+
+    final scale = (screenW / 1100).clamp(0.65, 1.0);
+    // Shrink the top bar a little on short windows so the side badges keep room.
+    final heightScale = (screenH / 620).clamp(0.72, 1.0);
+    final xpBarH = isCompact
+        ? ((screenW < 400 ? 54.0 : 66.0) * heightScale).clamp(42.0, 66.0)
+        : (114.0 * scale * heightScale).clamp(64.0, 114.0);
+    final xpBarW = xpBarH * (866.0 / 288.0);
+
+    final pillW = isCompact
+        ? ((screenW - 28 - 16) / 3).clamp(70.0, 140.0)
+        : (174.0 * scale).clamp(105.0, 174.0);
+    final pillH = pillW * (56.0 / 174.0);
+
+    final settingsSize = isCompact
+        ? (screenW < 400 ? 40.0 : 46.0)
+        : (56.0 * scale).clamp(44.0, 56.0);
+
+    // The Goals/Progress/Social stack must always fit between the top bar and
+    // the bottom edge, no matter how short the window is.
+    final badgeTop = isCompact ? (xpBarH + pillH + 14) : 138.0;
+    final availableBadgeH = screenH - badgeTop - 16;
+    final fitBadgeScale = ((availableBadgeH - 20) / (3 * 124)).clamp(0.40, 1.0);
+    final preferredBadgeScale = isCompact
+        ? (screenW < 400 ? 0.65 : 0.72)
+        : (isShort ? 0.75 : scale.clamp(0.80, 1.0));
+    final badgeScale =
+        preferredBadgeScale < fitBadgeScale ? preferredBadgeScale : fitBadgeScale;
+
+    final preferredBuildScale = isCompact ? 0.75 : (isShort ? 0.80 : 1.0);
+    final buildScale = (preferredBuildScale * heightScale).clamp(0.52, 1.0);
 
     return Stack(
       children: [
@@ -76,325 +109,161 @@ class WorldHUD extends StatelessWidget {
           top: 14,
           left: 14,
           right: 14,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              // ── 1. LEVEL & XP BAR + USERNAME BESIDE LEVEL ──
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  HoverScale(
-                    scale: 1.04,
-                    onTap: onOpenProgress,
-                    tooltip:
-                        'Level ${game.level} (${game.xp}/${game.maxXp} XP) · Tap for 5-Level Milestone Rewards',
-                    child: SizedBox(
-                      width: xpBarW,
-                      height: xpBarH,
-                      child: Stack(
-                        clipBehavior: Clip.none,
-                        children: [
-                          // Handcrafted progress-bar.webp asset
-                          Positioned.fill(
-                            child: Image.asset(
-                              'assets/ui/progress-bar.webp',
-                              fit: BoxFit.fill,
-                              filterQuality: FilterQuality.high,
-                            ),
-                          ),
-
-                          // Level Number in golden circle (centered at 27.2% horizontal, 48.5% vertical)
-                          Positioned(
-                            left: xpBarW * 0.272 - 30,
-                            top: xpBarH * 0.485 - 30,
-                            width: 60,
-                            height: 60,
-                            child: Center(
-                              child: Text(
-                                '${game.level}',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 38,
-                                  fontWeight: FontWeight.w900,
-                                  fontFamily: 'Lilita One',
-                                  shadows: [
-                                    Shadow(
-                                      color: Color(0xFF3B1404),
-                                      offset: Offset(0, 2.5),
-                                      blurRadius: 1,
-                                    ),
-                                    Shadow(
-                                      color: Color(0xFF1F0A02),
-                                      offset: Offset(0, 4),
-                                      blurRadius: 1,
-                                    ),
-                                    Shadow(
-                                      color: Color(0xCC000000),
-                                      offset: Offset(0, 5),
-                                      blurRadius: 7,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-
-                          // Liquid Gold XP Fill & Current / Required XP (e.g. "500 / 1000 XP")
-                          Positioned(
-                            left: xpBarW * 0.40,
-                            right: xpBarW * 0.065,
-                            top: xpBarH * 0.27,
-                            bottom: xpBarH * 0.30,
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(6),
-                              child: Stack(
-                                alignment: Alignment.centerLeft,
+          child: isCompact
+              ? Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Row 1: XP / Level Bar + Username + Settings
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerLeft,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.center,
                                 children: [
-                                  // Liquid Gold Progress Fill
-                                  FractionallySizedBox(
-                                    widthFactor: xpPercent / 100.0,
-                                    heightFactor: 1.0,
-                                    child: Container(
-                                      decoration: const BoxDecoration(
-                                        gradient: LinearGradient(
-                                          colors: [
-                                            Color(0xFFFFD700),
-                                            Color(0xFFF59E0B),
-                                            Color(0xFFB45309),
-                                            Color(0xFF78350F),
-                                          ],
-                                          begin: Alignment.topCenter,
-                                          end: Alignment.bottomCenter,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-
-                                  // Current / Required XP Label (e.g. "500 / 1000 XP")
-                                  Positioned.fill(
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 10),
-                                      child: Align(
-                                        alignment: Alignment.centerLeft,
-                                        child: FittedBox(
-                                          fit: BoxFit.scaleDown,
-                                          child: Text(
-                                            '${_fmtXp(game.xp)} / ${_fmtXp(game.maxXp)} XP',
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.w900,
-                                              fontSize: 15.5,
-                                              fontFamily: 'Lilita One',
-                                              letterSpacing: 0.5,
-                                              shadows: [
-                                                Shadow(
-                                                  color: Color(0xFF3B1404),
-                                                  offset: Offset(0, 2),
-                                                  blurRadius: 1,
-                                                ),
-                                                Shadow(
-                                                  color: Colors.black,
-                                                  offset: Offset(0, 3),
-                                                  blurRadius: 5,
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
+                                  _buildXpBarWidget(xpBarW, xpBarH, xpPercent),
+                                  if (screenW >= 460 && game.hasUsername) ...[
+                                    const SizedBox(width: 8),
+                                    _buildUsernamePlaqueWidget(isCompact: true),
+                                  ],
                                 ],
                               ),
                             ),
                           ),
-
-                          // Unclaimed 5-Level Milestone Reward Badge
-                          if (game.unclaimedMilestoneCount > 0)
-                            Positioned(
-                              right: -4,
-                              top: 10,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 3),
-                                decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    colors: [
-                                      Color(0xFFEF4444),
-                                      Color(0xFFB91C1C),
-                                    ],
-                                  ),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                      color: const Color(0xFFFEF08A),
-                                      width: 1.8),
-                                  boxShadow: const [
-                                    BoxShadow(
-                                      color: Color(0x99000000),
-                                      blurRadius: 6,
-                                      offset: Offset(0, 2),
-                                    ),
-                                  ],
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(Icons.card_giftcard_rounded,
-                                        color: Color(0xFFFEF08A), size: 13),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      '${game.unclaimedMilestoneCount}',
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontFamily: 'Lilita One',
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  // Player Username Plaque Displayed Right Beside the Level Bar
-                  if (game.hasUsername) ...[
-                    const SizedBox(width: 10),
-                    HoverScale(
-                      scale: 1.05,
-                      onTap: onOpenSettings,
-                      tooltip: 'Keeper Profile (${game.playerUsername})',
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 8),
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF4B1E06), Color(0xFF260D02)],
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                          ),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                              color: const Color(0xFFFBBF24), width: 2.2),
-                          boxShadow: const [
-                            BoxShadow(
-                              color: Color(0xAA000000),
-                              blurRadius: 8,
-                              offset: Offset(0, 4),
-                            ),
-                          ],
                         ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: 26,
-                              height: 26,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                gradient: const LinearGradient(
-                                  colors: [
-                                    Color(0xFFFDE047),
-                                    Color(0xFFD97706),
-                                  ],
-                                ),
-                                border: Border.all(
-                                    color: const Color(0xFFFFFBEB), width: 1.4),
-                              ),
-                              child: const Icon(Icons.pets_rounded,
-                                  color: Color(0xFF3B1404), size: 15),
-                            ),
-                            const SizedBox(width: 8),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                        const SizedBox(width: 8),
+                        HoverSettingsButton(
+                          onTap: onOpenSettings,
+                          size: settingsSize,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    // Row 2: Resources
+                    Row(
+                      key: walkthroughKeys?[WalkthroughTargets.hudResources],
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        Flexible(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerRight,
+                            child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                const Text(
-                                  'KEEPER',
-                                  style: TextStyle(
-                                    color: Color(0xFFFCD34D),
-                                    fontFamily: 'Lilita One',
-                                    fontSize: 9.5,
-                                    letterSpacing: 1.0,
-                                    height: 1.0,
-                                  ),
+                                _buildWoodResourcePill(
+                                  iconAsset: 'assets/ui/diamonds.png',
+                                  value: '${game.crystals}',
+                                  label: 'Star Crystals',
+                                  onPlus: onOpenBuild,
+                                  pillW: pillW,
+                                  pillH: pillH,
                                 ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  game.playerUsername,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontFamily: 'Lilita One',
-                                    fontSize: 16,
-                                    letterSpacing: 0.4,
-                                    height: 1.05,
-                                    shadows: [
-                                      Shadow(
-                                        color: Color(0xCC000000),
-                                        offset: Offset(0, 2),
-                                        blurRadius: 3,
-                                      ),
-                                    ],
-                                  ),
+                                const SizedBox(width: 8),
+                                _buildWoodResourcePill(
+                                  iconAsset: 'assets/ui/coins.png',
+                                  value: _fmt(game.coins),
+                                  label: 'Paw Coins',
+                                  onPlus: onOpenBuild,
+                                  pillW: pillW,
+                                  pillH: pillH,
+                                ),
+                                const SizedBox(width: 8),
+                                _buildWoodResourcePill(
+                                  iconAsset: 'assets/ui/dogfood.png',
+                                  value: _fmt(game.kibble),
+                                  label: 'Kibble',
+                                  onPlus: onOpenBuild,
+                                  pillW: pillW,
+                                  pillH: pillH,
                                 ),
                               ],
                             ),
-                          ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                )
+              : Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // ── 1. LEVEL & XP BAR + USERNAME BESIDE LEVEL ──
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        _buildXpBarWidget(xpBarW, xpBarH, xpPercent),
+                        if (game.hasUsername) ...[
+                          const SizedBox(width: 10),
+                          _buildUsernamePlaqueWidget(isCompact: false),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(width: 12),
+
+                    // ── 2. Top-Right Resources Row ──
+                    Expanded(
+                      child: Align(
+                        alignment: Alignment.topRight,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.topRight,
+                          child: Row(
+                            key: walkthroughKeys?[WalkthroughTargets.hudResources],
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _buildWoodResourcePill(
+                                iconAsset: 'assets/ui/diamonds.png',
+                                value: '${game.crystals}',
+                                label: 'Star Crystals',
+                                onPlus: onOpenBuild,
+                                pillW: pillW,
+                                pillH: pillH,
+                              ),
+                              const SizedBox(width: 10),
+                              _buildWoodResourcePill(
+                                iconAsset: 'assets/ui/coins.png',
+                                value: _fmt(game.coins),
+                                label: 'Paw Coins',
+                                onPlus: onOpenBuild,
+                                pillW: pillW,
+                                pillH: pillH,
+                              ),
+                              const SizedBox(width: 10),
+                              _buildWoodResourcePill(
+                                iconAsset: 'assets/ui/dogfood.png',
+                                value: _fmt(game.kibble),
+                                label: 'Kibble',
+                                onPlus: onOpenBuild,
+                                pillW: pillW,
+                                pillH: pillH,
+                              ),
+                              const SizedBox(width: 10),
+                              HoverSettingsButton(
+                                onTap: onOpenSettings,
+                                size: settingsSize,
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
                   ],
-                ],
-              ),
-
-              // ── 2. Top-Right Resources Row (Enlarged with Hover Effects) ──
-              Row(
-                key: walkthroughKeys?[WalkthroughTargets.hudResources],
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Star Crystals (Diamonds)
-                  _buildWoodResourcePill(
-                    iconAsset: 'assets/ui/diamonds.png',
-                    value: '${game.crystals}',
-                    label: 'Star Crystals',
-                    onPlus: onOpenBuild,
-                  ),
-                  const SizedBox(width: 10),
-
-                  // Paw Coins
-                  _buildWoodResourcePill(
-                    iconAsset: 'assets/ui/coins.png',
-                    value: _fmt(game.coins),
-                    label: 'Paw Coins',
-                    onPlus: onOpenBuild,
-                  ),
-                  const SizedBox(width: 10),
-
-                  // Kibble
-                  _buildWoodResourcePill(
-                    iconAsset: 'assets/ui/dogfood.png',
-                    value: _fmt(game.kibble),
-                    label: 'Kibble',
-                    onPlus: onOpenBuild,
-                  ),
-                  const SizedBox(width: 10),
-
-                  // Settings Gear Button with Hover Scale & Gear Rotation
-                  HoverSettingsButton(onTap: onOpenSettings),
-                ],
-              ),
-            ],
-          ),
+                ),
         ),
 
         // ── LEFT COLUMN BADGES (GOALS, PROGRESS, SOCIAL) Enlarged with Hover ──
         Positioned(
-          top: 138,
+          top: badgeTop,
           left: 14,
           child: Column(
             children: [
@@ -407,6 +276,8 @@ class WorldHUD extends StatelessWidget {
                 fontSize: 15.0,
                 tooltip: 'Open Daily Goals & Quests',
                 onTap: onOpenGoals,
+                badgeW: 118.0 * badgeScale,
+                badgeH: 124.0 * badgeScale,
               ),
               const SizedBox(height: 10),
 
@@ -419,6 +290,8 @@ class WorldHUD extends StatelessWidget {
                 fontSize: 14.0,
                 tooltip: 'View Season Progress & Milestones',
                 onTap: onOpenProgress,
+                badgeW: 118.0 * badgeScale,
+                badgeH: 124.0 * badgeScale,
               ),
               const SizedBox(height: 10),
 
@@ -431,6 +304,8 @@ class WorldHUD extends StatelessWidget {
                 fontSize: 15.0,
                 tooltip: 'Friends & Social Island Visits',
                 onTap: onOpenSocial,
+                badgeW: 118.0 * badgeScale,
+                badgeH: 124.0 * badgeScale,
               ),
             ],
           ),
@@ -446,27 +321,27 @@ class WorldHUD extends StatelessWidget {
             onTap: onOpenBuild,
             tooltip: 'Open Habitat & Building Store',
             child: SizedBox(
-              width: 152,
-              height: 174,
+              width: 152.0 * buildScale,
+              height: 174.0 * buildScale,
               child: Stack(
                 alignment: Alignment.center,
                 children: [
                   Image.asset(
                     'assets/ui/shop.png',
-                    width: 152,
-                    height: 174,
+                    width: 152.0 * buildScale,
+                    height: 174.0 * buildScale,
                     fit: BoxFit.contain,
                     filterQuality: FilterQuality.high,
                   ),
                   // "BUILD" carved title on the ivory bone sign
                   Positioned(
-                    top: 174 * 0.725 - 9,
-                    child: const Text(
+                    top: (174.0 * buildScale) * 0.725 - (13.5 * buildScale * 0.65),
+                    child: Text(
                       'BUILD',
                       style: TextStyle(
                         color: Color(0xFF3B1404),
                         fontWeight: FontWeight.w900,
-                        fontSize: 13.5,
+                        fontSize: 13.5 * buildScale,
                         fontFamily: 'Lilita One',
                         letterSpacing: 1.5,
                         shadows: [
@@ -493,14 +368,263 @@ class WorldHUD extends StatelessWidget {
         // ── HABITAT ACTION CONTROLS BAR (When a completed habitat is tapped) ──
         if (selectedHab != null && !selectedHab.underConstruction)
           Positioned(
-            bottom: 24,
-            left: 0,
-            right: 0,
+            bottom: 16,
+            // Leave the bottom-right corner free for the Build button so the
+            // action bar never sits underneath it.
+            left: 12,
+            right: 152.0 * buildScale + 28,
             child: Center(
-              child: _buildHabitatActionBar(context, selectedHab),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: _buildHabitatActionBar(context, selectedHab),
+              ),
             ),
           ),
       ],
+    );
+  }
+
+  Widget _buildXpBarWidget(double xpBarW, double xpBarH, double xpPercent) {
+    final double circleSize = (xpBarH * (60.0 / 114.0)).clamp(28.0, 60.0);
+    return HoverScale(
+      scale: 1.04,
+      onTap: onOpenProgress,
+      tooltip:
+          'Level ${game.level} (${game.xp}/${game.maxXp} XP) · Tap for Milestone Rewards',
+      child: SizedBox(
+        width: xpBarW,
+        height: xpBarH,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Positioned.fill(
+              child: Image.asset(
+                'assets/ui/progress-bar.webp',
+                fit: BoxFit.fill,
+                filterQuality: FilterQuality.high,
+              ),
+            ),
+            Positioned(
+              left: xpBarW * 0.272 - circleSize / 2,
+              top: xpBarH * 0.485 - circleSize / 2,
+              width: circleSize,
+              height: circleSize,
+              child: Center(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    '${game.level}',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 38 * (xpBarH / 114.0),
+                      fontWeight: FontWeight.w900,
+                      fontFamily: 'Lilita One',
+                      shadows: const [
+                        Shadow(
+                          color: Color(0xFF3B1404),
+                          offset: Offset(0, 2.5),
+                          blurRadius: 1,
+                        ),
+                        Shadow(
+                          color: Color(0xFF1F0A02),
+                          offset: Offset(0, 4),
+                          blurRadius: 1,
+                        ),
+                        Shadow(
+                          color: Color(0xCC000000),
+                          offset: Offset(0, 5),
+                          blurRadius: 7,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              left: xpBarW * 0.40,
+              right: xpBarW * 0.065,
+              top: xpBarH * 0.27,
+              bottom: xpBarH * 0.30,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: Stack(
+                  alignment: Alignment.centerLeft,
+                  children: [
+                    FractionallySizedBox(
+                      widthFactor: xpPercent / 100.0,
+                      heightFactor: 1.0,
+                      child: Container(
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              Color(0xFFFFD700),
+                              Color(0xFFF59E0B),
+                              Color(0xFFB45309),
+                              Color(0xFF78350F),
+                            ],
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                          ),
+                        ),
+                      ),
+                    ),
+                    Positioned.fill(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              '${_fmtXp(game.xp)} / ${_fmtXp(game.maxXp)} XP',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w900,
+                                fontSize:
+                                    (15.5 * (xpBarH / 114.0)).clamp(9.0, 15.5),
+                                fontFamily: 'Lilita One',
+                                letterSpacing: 0.5,
+                                shadows: const [
+                                  Shadow(
+                                    color: Color(0xFF3B1404),
+                                    offset: Offset(0, 2),
+                                    blurRadius: 1,
+                                  ),
+                                  Shadow(
+                                    color: Colors.black,
+                                    offset: Offset(0, 3),
+                                    blurRadius: 5,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (game.unclaimedMilestoneCount > 0)
+              Positioned(
+                right: -4,
+                top: 4,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFEF4444), Color(0xFFB91C1C)],
+                    ),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.white, width: 1.2),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.card_giftcard_rounded,
+                          color: Color(0xFFFEF08A), size: 10),
+                      const SizedBox(width: 3),
+                      Text(
+                        '${game.unclaimedMilestoneCount}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontFamily: 'Lilita One',
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUsernamePlaqueWidget({required bool isCompact}) {
+    return HoverScale(
+      scale: 1.05,
+      onTap: onOpenSettings,
+      tooltip: 'Keeper Profile (${game.playerUsername})',
+      child: Container(
+        padding: EdgeInsets.symmetric(
+            horizontal: isCompact ? 10 : 14, vertical: isCompact ? 5 : 8),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF4B1E06), Color(0xFF260D02)],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFFBBF24), width: 1.8),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0xAA000000),
+              blurRadius: 6,
+              offset: Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: isCompact ? 20 : 26,
+              height: isCompact ? 20 : 26,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFFDE047), Color(0xFFD97706)],
+                ),
+                border: Border.all(
+                    color: const Color(0xFFFFFBEB),
+                    width: isCompact ? 1.0 : 1.4),
+              ),
+              child: Icon(Icons.pets_rounded,
+                  color: const Color(0xFF3B1404), size: isCompact ? 12 : 15),
+            ),
+            const SizedBox(width: 6),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'KEEPER',
+                  style: TextStyle(
+                    color: const Color(0xFFFCD34D),
+                    fontFamily: 'Lilita One',
+                    fontSize: isCompact ? 8.0 : 9.5,
+                    letterSpacing: 0.8,
+                    height: 1.0,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: isCompact ? 78 : 110,
+                  ),
+                  child: Text(
+                    game.playerUsername,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontFamily: 'Fredoka',
+                      fontWeight: FontWeight.bold,
+                      fontSize: isCompact ? 11.0 : 13.0,
+                      height: 1.0,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -509,10 +633,9 @@ class WorldHUD extends StatelessWidget {
     required String value,
     required String label,
     required VoidCallback onPlus,
+    double pillH = 56.0,
+    double pillW = 174.0,
   }) {
-    // Enlarged natural aspect ratio: 174w x 56h
-    const double pillH = 56.0;
-    const double pillW = 174.0;
 
     return HoverScale(
       scale: 1.05,
@@ -638,10 +761,10 @@ class WorldHUD extends StatelessWidget {
     required double fontSize,
     required String tooltip,
     required VoidCallback onTap,
+    double badgeW = 118.0,
+    double badgeH = 124.0,
   }) {
-    // Enlarged Badge dimensions matching React & Shop size: 118w x 124h
-    const double badgeW = 118.0;
-    const double badgeH = 124.0;
+    final scaledFontSize = fontSize * (badgeH / 124.0);
 
     return HoverScale(
       scale: 1.08,
@@ -663,7 +786,7 @@ class WorldHUD extends StatelessWidget {
             Positioned(
               left: badgeW * textLeftPercent - (badgeW * textWidthPercent / 2),
               width: badgeW * textWidthPercent,
-              top: badgeH * textTopPercent - (fontSize * 0.7),
+              top: badgeH * textTopPercent - (scaledFontSize * 0.7),
               child: Center(
                 child: Text(
                   label,
@@ -671,7 +794,7 @@ class WorldHUD extends StatelessWidget {
                   style: TextStyle(
                     color: const Color(0xFF3B1404),
                     fontWeight: FontWeight.w900,
-                    fontSize: fontSize,
+                    fontSize: scaledFontSize,
                     fontFamily: 'Lilita One',
                     letterSpacing: 0.8,
                     shadows: const [
@@ -720,9 +843,6 @@ class WorldHUD extends StatelessWidget {
     final isReadyToCollectFood = isFactory &&
         hab.readyToCollectDogfood &&
         (hab.dogfoodAccumulated > 0 || (hab.bakingFoodAmount ?? 0) > 0);
-    final foodReadyAmount = hab.dogfoodAccumulated > 0
-        ? hab.dogfoodAccumulated
-        : (hab.bakingFoodAmount ?? 0);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -1301,7 +1421,8 @@ class WorldHUD extends StatelessWidget {
 
 class HoverSettingsButton extends StatefulWidget {
   final VoidCallback onTap;
-  const HoverSettingsButton({super.key, required this.onTap});
+  final double size;
+  const HoverSettingsButton({super.key, required this.onTap, this.size = 56.0});
 
   @override
   State<HoverSettingsButton> createState() => _HoverSettingsButtonState();
@@ -1327,15 +1448,15 @@ class _HoverSettingsButtonState extends State<HoverSettingsButton> {
           duration: const Duration(milliseconds: 160),
           curve: Curves.easeOutBack,
           child: SizedBox(
-            width: 56,
-            height: 56,
+            width: widget.size,
+            height: widget.size,
             child: Stack(
               alignment: Alignment.center,
               children: [
                 Image.asset(
                   'assets/ui/SettingPlaceHolder.webp',
-                  width: 56,
-                  height: 56,
+                  width: widget.size,
+                  height: widget.size,
                   fit: BoxFit.contain,
                   filterQuality: FilterQuality.high,
                 ),
@@ -1343,10 +1464,10 @@ class _HoverSettingsButtonState extends State<HoverSettingsButton> {
                   turns: _hovered ? 0.125 : 0.0,
                   duration: const Duration(milliseconds: 300),
                   curve: Curves.easeOut,
-                  child: const Icon(
+                  child: Icon(
                     Icons.settings,
                     color: Colors.white,
-                    size: 28,
+                    size: widget.size * 0.50,
                     shadows: [
                       Shadow(
                         color: Color(0xCC000000),

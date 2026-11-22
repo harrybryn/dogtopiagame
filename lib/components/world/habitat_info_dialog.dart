@@ -21,6 +21,7 @@ class HabitatInfoDialog extends StatelessWidget {
     return GenericModal(
       title: habitat.name.toUpperCase(),
       maxWidth: 540,
+      scrollable: true,
       onClose: () => Navigator.of(context).pop(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

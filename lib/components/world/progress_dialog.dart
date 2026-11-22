@@ -102,22 +102,32 @@ class ProgressDialog extends StatelessWidget {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text(
-                                game.hasUsername
-                                    ? game.playerUsername
-                                    : 'Island Keeper',
-                                style: const TextStyle(
-                                  color: Color(0xFFFEF08A),
-                                  fontFamily: 'Lilita One',
-                                  fontSize: 15,
+                              Flexible(
+                                child: Text(
+                                  game.hasUsername
+                                      ? game.playerUsername
+                                      : 'Island Keeper',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Color(0xFFFEF08A),
+                                    fontFamily: 'Lilita One',
+                                    fontSize: 15,
+                                  ),
                                 ),
                               ),
-                              Text(
-                                '${_fmtNum(game.xp)} / ${_fmtNum(game.maxXp)} XP',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontFamily: 'Lilita One',
-                                  fontSize: 13.5,
+                              const SizedBox(width: 8),
+                              Flexible(
+                                child: Text(
+                                  '${_fmtNum(game.xp)} / ${_fmtNum(game.maxXp)} XP',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  textAlign: TextAlign.end,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontFamily: 'Lilita One',
+                                    fontSize: 13.5,
+                                  ),
                                 ),
                               ),
                             ],
@@ -410,13 +420,17 @@ class ProgressDialog extends StatelessWidget {
           child: Image.asset(asset, width: 16, height: 16, fit: BoxFit.contain),
         ),
         const SizedBox(width: 4),
-        Text(
-          label,
-          style: TextStyle(
-            color: muted ? const Color(0xFF8C7E6D) : const Color(0xFF78350F),
-            fontFamily: 'Fredoka',
-            fontWeight: FontWeight.w800,
-            fontSize: 12,
+        Flexible(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: muted ? const Color(0xFF8C7E6D) : const Color(0xFF78350F),
+              fontFamily: 'Fredoka',
+              fontWeight: FontWeight.w800,
+              fontSize: 12,
+            ),
           ),
         ),
       ],
