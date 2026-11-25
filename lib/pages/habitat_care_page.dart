@@ -315,9 +315,7 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
     // Short landscape windows need smaller art and tighter spacing, otherwise
     // the dog info sits far below the fold and requires endless scrolling.
     final shortStage = media.size.height < 560;
-    final pillW = isCompact
-        ? ((screenW - 28 - 16) / 3).clamp(70.0, 138.0)
-        : 138.0;
+    final pillW = isCompact ? 112.0 : 138.0;
     final pillH = isCompact ? 36.0 : 44.0;
 
     return Scaffold(
@@ -339,86 +337,67 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
             top: 10,
             left: 14,
             right: 14,
-            child: isCompact
-                ? Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          _buildBackButton(isCompact: true),
-                          _buildTitlePlaque(isCompact: true),
-                        ],
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                _buildBackButton(isCompact: isCompact),
+                Expanded(
+                  flex: isCompact ? 2 : 1,
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: _buildTitlePlaque(isCompact: isCompact),
                       ),
-                      const SizedBox(height: 6),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          _buildWoodResourcePill(
-                            iconAsset: 'assets/ui/diamonds.png',
-                            value: '${widget.game.crystals}',
-                            onPlus: widget.onBackToWorld,
-                            pillW: pillW,
-                            pillH: pillH,
-                          ),
-                          const SizedBox(width: 8),
-                          _buildWoodResourcePill(
-                            iconAsset: 'assets/ui/coins.png',
-                            value: _fmt(widget.game.coins),
-                            onPlus: widget.onBackToWorld,
-                            pillW: pillW,
-                            pillH: pillH,
-                          ),
-                          const SizedBox(width: 8),
-                          _buildWoodResourcePill(
-                            iconAsset: 'assets/ui/dogfood.png',
-                            value: _fmt(widget.game.kibble),
-                            onPlus: widget.onBackToWorld,
-                            pillW: pillW,
-                            pillH: pillH,
-                          ),
-                        ],
-                      ),
-                    ],
-                  )
-                : Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      _buildBackButton(isCompact: false),
-                      const Spacer(),
-                      _buildTitlePlaque(isCompact: false),
-                      const Spacer(),
-                      Row(
+                    ),
+                  ),
+                ),
+                Flexible(
+                  flex: isCompact ? 3 : 0,
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerRight,
+                      child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           _buildWoodResourcePill(
                             iconAsset: 'assets/ui/diamonds.png',
                             value: '${widget.game.crystals}',
                             onPlus: widget.onBackToWorld,
+                            pillW: pillW,
+                            pillH: pillH,
                           ),
-                          const SizedBox(width: 8),
+                          SizedBox(width: isCompact ? 6 : 8),
                           _buildWoodResourcePill(
                             iconAsset: 'assets/ui/coins.png',
                             value: _fmt(widget.game.coins),
                             onPlus: widget.onBackToWorld,
+                            pillW: pillW,
+                            pillH: pillH,
                           ),
-                          const SizedBox(width: 8),
+                          SizedBox(width: isCompact ? 6 : 8),
                           _buildWoodResourcePill(
                             iconAsset: 'assets/ui/dogfood.png',
                             value: _fmt(widget.game.kibble),
                             onPlus: widget.onBackToWorld,
+                            pillW: pillW,
+                            pillH: pillH,
                           ),
                         ],
                       ),
-                    ],
+                    ),
                   ),
+                ),
+              ],
+            ),
           ),
 
           // ── 3. Main Stage Content Area ──
           Positioned(
-            // The compact top bar is two rows tall. Start below the resource
-            // pills so the dog name plaque can never cover coins/kibble/gems.
-            top: isCompact ? 152 : 86,
+            top: isCompact ? 74 : 86,
             bottom: 18,
             left: isCompact ? 14 : 36,
             right: isCompact ? 14 : 48,
@@ -1604,7 +1583,9 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
     double pillW = 138.0,
     double pillH = 44.0,
   }) {
-    final double iconSize = (pillH * 0.50).clamp(16.0, 24.0);
+    final double iconSize = (pillH * 0.52).clamp(16.0, 24.0);
+    final double plusSize = (pillH * 0.46).clamp(16.0, 22.0);
+    final double fontSize = (pillH * 0.34).clamp(12.0, 15.0);
 
     return HoverScale(
       scale: 1.05,
@@ -1613,8 +1594,27 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
         width: pillW,
         height: pillH,
         child: Stack(
+          clipBehavior: Clip.none,
           alignment: Alignment.center,
           children: [
+            Positioned(
+              left: pillW * 0.04,
+              right: pillW * 0.04,
+              top: pillH * 0.14,
+              bottom: pillH * 0.06,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(pillH * 0.45),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x66000000),
+                      blurRadius: 8,
+                      offset: Offset(0, 4),
+                    ),
+                  ],
+                ),
+              ),
+            ),
             Positioned.fill(
               child: Image.asset(
                 'assets/ui/ResourcesPlaceHolder.webp',
@@ -1623,8 +1623,8 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
               ),
             ),
             Positioned(
-              left: pillW * 0.19 - iconSize / 2,
-              top: pillH * 0.50 - iconSize / 2,
+              left: pillW * 0.18 - iconSize / 2,
+              top: (pillH - iconSize) / 2,
               width: iconSize,
               height: iconSize,
               child: Image.asset(
@@ -1639,45 +1639,63 @@ class _HabitatCarePageState extends State<HabitatCarePage> {
               top: 0,
               bottom: 0,
               child: Center(
-                child: Text(
-                  value,
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 14.5,
-                    fontFamily: 'Lilita One',
-                    letterSpacing: 0.5,
-                    shadows: [
-                      Shadow(
-                        color: Color(0xFF3B1404),
-                        offset: Offset(0, 1.5),
-                        blurRadius: 1,
-                      ),
-                      Shadow(
-                        color: Colors.black,
-                        offset: Offset(0, 2),
-                        blurRadius: 3,
-                      ),
-                    ],
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    value,
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                      fontSize: fontSize,
+                      fontFamily: 'Lilita One',
+                      letterSpacing: 0.5,
+                      shadows: const [
+                        Shadow(
+                          color: Color(0xFF3B1404),
+                          offset: Offset(0, 1.5),
+                          blurRadius: 1,
+                        ),
+                        Shadow(
+                          color: Colors.black,
+                          offset: Offset(0, 2),
+                          blurRadius: 3,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
             ),
             Positioned(
-              right: pillW * 0.17 - 10,
-              top: pillH * 0.50 - 10,
-              width: 20,
-              height: 20,
+              left: pillW * 0.82 - plusSize / 2,
+              top: (pillH - plusSize) / 2,
+              width: plusSize,
+              height: plusSize,
               child: Container(
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Color(0xFF22C55E),
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF4ADE80), Color(0xFF16A34A)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  border: Border.all(color: const Color(0xFFDCFCE7), width: 1.2),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x66000000),
+                      offset: Offset(0, 1.5),
+                      blurRadius: 2,
+                    ),
+                  ],
                 ),
                 alignment: Alignment.center,
-                child: const Icon(Icons.add, color: Colors.white, size: 14),
+                child: Icon(
+                  Icons.add_rounded,
+                  color: Colors.white,
+                  size: plusSize * 0.72,
+                ),
               ),
             ),
           ],

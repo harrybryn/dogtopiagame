@@ -1,61 +1,27 @@
 import 'package:flutter/material.dart';
+import '../../models/friend_visit_model.dart';
 import '../common/generic_modal.dart';
 import '../common/hover_scale.dart';
 
 class SocialDialog extends StatefulWidget {
   final VoidCallback? onVisit;
+  final Function(MockFriend friend)? onVisitFriend;
 
-  const SocialDialog({super.key, this.onVisit});
+  const SocialDialog({super.key, this.onVisit, this.onVisitFriend});
 
   @override
   State<SocialDialog> createState() => _SocialDialogState();
 }
 
 class _SocialDialogState extends State<SocialDialog> {
-  final List<Map<String, dynamic>> _friends = [
-    {
-      'id': 1,
-      'name': 'CanineKing_Alex',
-      'level': 24,
-      'dog': 'Galaxy Dog',
-      'status': 'Online',
-      'gifted': false,
-    },
-    {
-      'id': 2,
-      'name': 'PupWhisperer_Mia',
-      'level': 19,
-      'dog': 'Cerberus Pup',
-      'status': 'Visiting Park',
-      'gifted': false,
-    },
-    {
-      'id': 3,
-      'name': 'DesertWolf_Zack',
-      'level': 15,
-      'dog': 'Pharaoh Hound',
-      'status': 'Offline',
-      'gifted': false,
-    },
-    {
-      'id': 4,
-      'name': 'IslandPaws_Leo',
-      'level': 11,
-      'dog': 'Golden Retriever',
-      'status': 'Online',
-      'gifted': false,
-    },
-  ];
+  late final List<MockFriend> _friends = MockFriend.allFriends();
+  final Set<String> _giftedIds = {};
 
   String? _toastMessage;
 
-  void _sendGift(int id, String name) {
+  void _sendGift(String id, String name) {
     setState(() {
-      for (var f in _friends) {
-        if (f['id'] == id) {
-          f['gifted'] = true;
-        }
-      }
+      _giftedIds.add(id);
       _toastMessage = 'Sent Kibble & Treat gift to $name! (+100 Coins, +50 XP)';
     });
     Future.delayed(const Duration(seconds: 3), () {
@@ -63,10 +29,16 @@ class _SocialDialogState extends State<SocialDialog> {
     });
   }
 
-  Widget _buildVisitButton() {
+  Widget _buildVisitButton(MockFriend friend) {
     return HoverScale(
       scale: 1.06,
-      onTap: () => widget.onVisit?.call(),
+      onTap: () {
+        if (widget.onVisitFriend != null) {
+          widget.onVisitFriend!(friend);
+        } else {
+          widget.onVisit?.call();
+        }
+      },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
         decoration: BoxDecoration(
@@ -124,7 +96,7 @@ class _SocialDialogState extends State<SocialDialog> {
     );
   }
 
-  Widget _buildGiftButton(int id, String name) {
+  Widget _buildGiftButton(String id, String name) {
     return HoverScale(
       scale: 1.06,
       onTap: () => _sendGift(id, name),
@@ -194,7 +166,9 @@ class _SocialDialogState extends State<SocialDialog> {
               separatorBuilder: (_, __) => const SizedBox(height: 6),
               itemBuilder: (context, index) {
                 final friend = _friends[index];
-                final isGifted = friend['gifted'] as bool;
+                final isGifted = _giftedIds.contains(friend.id);
+                final canVisitThisFriend = widget.onVisitFriend != null ||
+                    (widget.onVisit != null && index == 0);
 
                 return Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -237,7 +211,7 @@ class _SocialDialogState extends State<SocialDialog> {
                             child: Container(
                               padding: const EdgeInsets.all(2),
                               decoration: BoxDecoration(
-                                color: friend['status'] == 'Online'
+                                color: friend.status == 'Online'
                                     ? Colors.green
                                     : Colors.grey,
                                 shape: BoxShape.circle,
@@ -257,7 +231,7 @@ class _SocialDialogState extends State<SocialDialog> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              friend['name'] as String,
+                              friend.name,
                               style: const TextStyle(
                                 color: Color(0xFF3B1404),
                                 fontFamily: 'Lilita One',
@@ -266,7 +240,7 @@ class _SocialDialogState extends State<SocialDialog> {
                               ),
                             ),
                             Text(
-                              'Level ${friend['level']} · ${friend['dog']}',
+                              'Level ${friend.level} · ${friend.unlockedIslandCount} Islands · ${friend.favoriteDog}',
                               style: const TextStyle(
                                 color: Color(0xFFB45309),
                                 fontFamily: 'Fredoka',
@@ -280,21 +254,21 @@ class _SocialDialogState extends State<SocialDialog> {
 
                       // Actions
                       SizedBox(
-                        width: widget.onVisit != null && friend['id'] == 1
-                            ? 118
-                            : 108,
+                        width: canVisitThisFriend ? 118 : 108,
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            if (widget.onVisit != null && friend['id'] == 1)
-                              _buildVisitButton(),
+                            if (canVisitThisFriend) ...[
+                              _buildVisitButton(friend),
+                              const SizedBox(height: 4),
+                            ],
                             if (isGifted)
                               _buildGiftSentButton()
                             else
                               _buildGiftButton(
-                                friend['id'] as int,
-                                friend['name'] as String,
+                                friend.id,
+                                friend.name,
                               ),
                           ],
                         ),

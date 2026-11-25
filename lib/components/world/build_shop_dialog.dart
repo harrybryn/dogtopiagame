@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../models/habitat_catalog.dart';
+import '../../models/island_model.dart';
 import '../../state/game_controller.dart';
 import '../common/hover_scale.dart';
 
@@ -623,18 +624,38 @@ class _BuildShopDialogState extends State<BuildShopDialog> {
             final hab = habitats[index];
             final canAfford = widget.game.coins >= hab.costCoins &&
                 widget.game.crystals >= hab.costDiamonds;
-            final isUnlocked = widget.game.level >= hab.requiredLevel;
+            final levelUnlocked = widget.game.level >= hab.requiredLevel;
+            final allowedOnIsland = IslandCatalog.isItemAllowedOnIsland(
+                hab, widget.game.currentIslandId);
+            final requiredIslandName =
+                IslandCatalog.requiredIslandNameForItem(hab);
+            final isUnlocked = levelUnlocked && allowedOnIsland;
 
             return _buildItemCard(
               name: hab.name,
               image: hab.assetImage,
               element: hab.element,
               subtitle: '${hab.sizeW}×${hab.sizeH} Plot · +${hab.coinRate}',
+              buildTime: hab.formattedBuildTime,
               costCoins: hab.costCoins,
               costDiamonds: hab.costDiamonds,
               requiredLevel: hab.requiredLevel,
               isUnlocked: isUnlocked,
               canAfford: canAfford,
+              lockLabelOverride: !levelUnlocked
+                  ? null
+                  : (!allowedOnIsland
+                      ? '${requiredIslandName.split(' ').first.toUpperCase()} ONLY'
+                      : null),
+              onTapLocked: () {
+                if (!levelUnlocked) {
+                  _showToast(
+                      '🔒 ${hab.name} unlocks at Level ${hab.requiredLevel}!');
+                } else if (!allowedOnIsland) {
+                  _showToast(
+                      '🏝️ ${hab.name} can only be built on $requiredIslandName!');
+                }
+              },
               onBuy: () {
                 Navigator.of(context).pop();
                 widget.onSelectBuildingToPlace(hab);
@@ -778,6 +799,7 @@ class _BuildShopDialogState extends State<BuildShopDialog> {
               image: item.assetImage,
               element: 'Care Facility',
               subtitle: '${item.sizeW}×${item.sizeH} Plot · ${item.description}',
+              buildTime: item.formattedBuildTime,
               costCoins: item.costCoins,
               costDiamonds: item.costDiamonds,
               requiredLevel: item.requiredLevel,
@@ -828,6 +850,7 @@ class _BuildShopDialogState extends State<BuildShopDialog> {
               image: item.assetImage,
               element: 'Island Decor',
               subtitle: '${item.sizeW}×${item.sizeH} · Ornaments',
+              buildTime: item.formattedBuildTime,
               costCoins: item.costCoins,
               costDiamonds: item.costDiamonds,
               requiredLevel: item.requiredLevel,
@@ -1554,6 +1577,7 @@ class _BuildShopDialogState extends State<BuildShopDialog> {
     required String image,
     required String element,
     required String subtitle,
+    String? buildTime,
     required int costCoins,
     required int costDiamonds,
     required int requiredLevel,
@@ -1561,6 +1585,7 @@ class _BuildShopDialogState extends State<BuildShopDialog> {
     required bool canAfford,
     required VoidCallback onBuy,
     VoidCallback? onTapLocked,
+    String? lockLabelOverride,
   }) {
     final compact = _isCompact(MediaQuery.of(context).size);
     return Container(
@@ -1623,26 +1648,76 @@ class _BuildShopDialogState extends State<BuildShopDialog> {
                         ),
                       ),
                     ),
-                    if (!isUnlocked)
-                      Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: const Color(0xDD3B1404),
-                          border: Border.all(
-                              color: const Color(0xFFFBBF24), width: 2),
-                          boxShadow: const [
-                            BoxShadow(
-                              color: Color(0x66000000),
-                              blurRadius: 6,
-                              offset: Offset(0, 2),
+                    if (buildTime != null)
+                      Positioned(
+                        top: 2,
+                        right: 2,
+                        child: Container(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: compact ? 4 : 6,
+                            vertical: compact ? 1.5 : 2.5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xDD3B1404),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: const Color(0xFFFBBF24),
+                              width: 1.0,
                             ),
-                          ],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.schedule_rounded,
+                                size: compact ? 8 : 10,
+                                color: const Color(0xFFFDE047),
+                              ),
+                              SizedBox(width: compact ? 2 : 3),
+                              Text(
+                                buildTime,
+                                style: TextStyle(
+                                  color: const Color(0xFFFEF3C7),
+                                  fontFamily: 'Lilita One',
+                                  fontSize: compact ? 7.5 : 9.5,
+                                  height: 1.0,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                        child: Icon(
-                          Icons.lock_rounded,
-                          size: compact ? 14 : 18,
-                          color: const Color(0xFFFBBF24),
+                      ),
+                    if (!isUnlocked)
+                      Positioned(
+                        top: 2,
+                        left: 2,
+                        child: Container(
+                          width: compact ? 20 : 26,
+                          height: compact ? 20 : 26,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFFFEF08A), Color(0xFFD97706)],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            border: Border.all(
+                              color: const Color(0xFF3B1404),
+                              width: 1.5,
+                            ),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Color(0x55000000),
+                                blurRadius: 4,
+                                offset: Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Icon(
+                            Icons.lock_rounded,
+                            size: compact ? 11 : 14,
+                            color: const Color(0xFF3B1404),
+                          ),
                         ),
                       ),
                   ],
@@ -1685,38 +1760,58 @@ class _BuildShopDialogState extends State<BuildShopDialog> {
             ),
             SizedBox(height: compact ? 2 : 5),
 
-            // Button or Level Lock
+            // Button or Level/Island Lock
             if (!isUnlocked)
               HoverScale(
                 scale: 1.05,
                 onTap: onTapLocked,
                 child: Container(
                   padding: EdgeInsets.symmetric(
-                    horizontal: compact ? 6 : 10,
-                    vertical: compact ? 2 : 4,
+                    horizontal: compact ? 7 : 11,
+                    vertical: compact ? 3 : 5,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF786C5F),
+                    gradient: LinearGradient(
+                      colors: lockLabelOverride != null
+                          ? const [Color(0xFF0F766E), Color(0xFF115E59)]
+                          : const [Color(0xFF573B26), Color(0xFF3B2313)],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                    ),
                     borderRadius: BorderRadius.circular(10),
-                    border:
-                        Border.all(color: const Color(0xFF9CA3AF), width: 1.2),
+                    border: Border.all(
+                      color: const Color(0xFFFBBF24),
+                      width: 1.3,
+                    ),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x44000000),
+                        blurRadius: 4,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
                   ),
                   child: FittedBox(
                     fit: BoxFit.scaleDown,
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.lock,
-                            size: compact ? 9 : 11, color: Colors.white),
-                        SizedBox(width: compact ? 2 : 4),
+                        Icon(
+                          lockLabelOverride != null
+                              ? Icons.public_rounded
+                              : Icons.lock_rounded,
+                          size: compact ? 9 : 11,
+                          color: const Color(0xFFFDE047),
+                        ),
+                        SizedBox(width: compact ? 3 : 4),
                         Text(
-                          'LVL $requiredLevel REQUIRED',
+                          lockLabelOverride ?? 'LVL $requiredLevel REQUIRED',
                           style: TextStyle(
-                            color: Colors.white,
+                            color: const Color(0xFFFEF3C7),
                             fontFamily: 'Lilita One',
                             fontSize: compact ? 8 : 9.5,
                             fontWeight: FontWeight.w900,
-                            letterSpacing: 0.3,
+                            letterSpacing: 0.4,
                           ),
                         ),
                       ],

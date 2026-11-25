@@ -4,6 +4,7 @@ class HabitatModel {
   final String id;
   final String type; // 'habitat' | 'facility' | 'decor'
   final String habitatId; // e.g. 'garden-park', 'desert-oasis', 'breeding-den'
+  final String islandId; // e.g. 'meadow', 'desert'
   String name;
   int level;
   int col;
@@ -34,6 +35,7 @@ class HabitatModel {
     required this.id,
     this.type = 'habitat',
     required this.habitatId,
+    this.islandId = 'meadow',
     required this.name,
     this.level = 1,
     required this.col,
@@ -140,6 +142,7 @@ class HabitatModel {
         'id': id,
         'type': type,
         'habitatId': habitatId,
+        'islandId': islandId,
         'name': name,
         'level': level,
         'col': col,
@@ -177,6 +180,7 @@ class HabitatModel {
       id: json['id'] as String? ?? 'hab_${DateTime.now().millisecondsSinceEpoch}',
       type: json['type'] as String? ?? 'habitat',
       habitatId: json['habitatId'] as String? ?? 'garden-park',
+      islandId: json['islandId'] as String? ?? 'meadow',
       name: json['name'] as String? ?? 'Garden Park',
       level: json['level'] as int? ?? 1,
       col: json['col'] as int? ?? 11,

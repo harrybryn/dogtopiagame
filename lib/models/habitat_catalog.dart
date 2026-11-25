@@ -18,6 +18,7 @@ class HabitatCatalogItem {
   final String bestFor;
   final Color themeColor;
   final String imageAsset;
+  final int buildDurationSeconds;
 
   const HabitatCatalogItem({
     required this.id,
@@ -37,7 +38,22 @@ class HabitatCatalogItem {
     this.bestFor = '',
     this.themeColor = Colors.amber,
     required this.imageAsset,
+    this.buildDurationSeconds = 60,
   });
+
+  String get formattedBuildTime {
+    if (buildDurationSeconds >= 3600) {
+      final hrs = buildDurationSeconds ~/ 3600;
+      final mins = (buildDurationSeconds % 3600) ~/ 60;
+      return mins == 0 ? '${hrs}h' : '${hrs}h ${mins}m';
+    }
+    if (buildDurationSeconds >= 60) {
+      final mins = buildDurationSeconds ~/ 60;
+      final secs = buildDurationSeconds % 60;
+      return secs == 0 ? '${mins}m' : '${mins}m ${secs}s';
+    }
+    return '${buildDurationSeconds}s';
+  }
 
   String get assetImage => imageAsset;
   String get element => tagline;
@@ -154,6 +170,7 @@ class HabitatCatalog {
       bestFor: 'English Bulldog, Toy Pug, Japanese Shiba',
       themeColor: Color(0xFFEC4899),
       imageAsset: 'assets/habitats/GardenHabitat.png',
+      buildDurationSeconds: 60,
     ),
     HabitatCatalogItem(
       id: 'desert-oasis',
@@ -171,6 +188,7 @@ class HabitatCatalog {
       bestFor: 'German Shepherd, Pharaoh Hound, Basenji',
       themeColor: Color(0xFFF59E0B),
       imageAsset: 'assets/habitats/OasisHabitat.png',
+      buildDurationSeconds: 300,
     ),
     HabitatCatalogItem(
       id: 'snowy-peak',
@@ -188,6 +206,7 @@ class HabitatCatalog {
       bestFor: 'Arctic Husky, White Samoyed',
       themeColor: Color(0xFF38BDF8),
       imageAsset: 'assets/habitats/SnowHabitat.png',
+      buildDurationSeconds: 900,
     ),
     HabitatCatalogItem(
       id: 'forest-meadow',
@@ -205,6 +224,7 @@ class HabitatCatalog {
       bestFor: 'Hunting Beagle, Golden Retriever',
       themeColor: Color(0xFF22C55E),
       imageAsset: 'assets/habitats/ForestHabitat.png',
+      buildDurationSeconds: 3600,
     ),
     HabitatCatalogItem(
       id: 'beach-cove',
@@ -222,6 +242,7 @@ class HabitatCatalog {
       bestFor: 'Yellow Labrador, Newfoundland',
       themeColor: Color(0xFF06B6D4),
       imageAsset: 'assets/habitats/BeachHabitat.png',
+      buildDurationSeconds: 10800,
     ),
     HabitatCatalogItem(
       id: 'legendary-realm',
@@ -239,6 +260,7 @@ class HabitatCatalog {
       bestFor: 'Cerberus Pup, Galaxy Astral Pup',
       themeColor: Color(0xFFA855F7),
       imageAsset: 'assets/habitats/LegendaryHabitat.png',
+      buildDurationSeconds: 28800,
     ),
 
     // ── Facilities ──
@@ -257,6 +279,7 @@ class HabitatCatalog {
       bestFor: 'All Adult Breeds (Lv 4+)',
       themeColor: Color(0xFFF43F5E),
       imageAsset: 'assets/itemsInShop/building/BreedingDen.webp',
+      buildDurationSeconds: 7200,
     ),
     HabitatCatalogItem(
       id: 'water-station',
@@ -273,6 +296,7 @@ class HabitatCatalog {
       bestFor: 'Park-wide hydration',
       themeColor: Color(0xFF3B82F6),
       imageAsset: 'assets/itemsInShop/building/WaterStation.webp',
+      buildDurationSeconds: 120,
     ),
     HabitatCatalogItem(
       id: 'dogfood-factory',
@@ -290,6 +314,7 @@ class HabitatCatalog {
       bestFor: 'All Dog Feeding & Evolution',
       themeColor: Color(0xFFF59E0B),
       imageAsset: 'assets/itemsInShop/building/DogfoodFactory.png',
+      buildDurationSeconds: 600,
     ),
 
     // ── Decorations ──
@@ -307,6 +332,7 @@ class HabitatCatalog {
       bestFor: 'Desert Oasis decor',
       themeColor: Color(0xFFEAB308),
       imageAsset: 'assets/itemsInShop/building/GoldenPalm.webp',
+      buildDurationSeconds: 60,
     ),
     HabitatCatalogItem(
       id: 'bone-sign',
@@ -322,6 +348,7 @@ class HabitatCatalog {
       bestFor: 'Park entrance',
       themeColor: Color(0xFFF97316),
       imageAsset: 'assets/itemsInShop/building/BoneShapeSign.webp',
+      buildDurationSeconds: 30,
     ),
   ];
 

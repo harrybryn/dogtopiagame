@@ -254,9 +254,7 @@ class _DogFactoryInsidePageState extends State<DogFactoryInsidePage> {
     final media = MediaQuery.of(context);
     final screenW = media.size.width;
     final isCompact = screenW < 880;
-    final pillW = isCompact
-        ? ((screenW - 28 - 16) / 3).clamp(70.0, 138.0)
-        : 138.0;
+    final pillW = isCompact ? 112.0 : 138.0;
     final pillH = isCompact ? 36.0 : 44.0;
 
     return Scaffold(
@@ -285,20 +283,31 @@ class _DogFactoryInsidePageState extends State<DogFactoryInsidePage> {
             top: 10,
             left: 14,
             right: 14,
-            child: isCompact
-                ? Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          _buildBackButton(isCompact: true),
-                          _buildTitlePlaque(isCompact: true),
-                        ],
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                _buildBackButton(isCompact: isCompact),
+                Expanded(
+                  flex: isCompact ? 2 : 1,
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: _buildTitlePlaque(isCompact: isCompact),
                       ),
-                      const SizedBox(height: 6),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
+                    ),
+                  ),
+                ),
+                Flexible(
+                  flex: isCompact ? 3 : 0,
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerRight,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           _buildWoodResourcePill(
                             iconAsset: 'assets/ui/diamonds.png',
@@ -306,14 +315,14 @@ class _DogFactoryInsidePageState extends State<DogFactoryInsidePage> {
                             pillW: pillW,
                             pillH: pillH,
                           ),
-                          const SizedBox(width: 8),
+                          SizedBox(width: isCompact ? 6 : 8),
                           _buildWoodResourcePill(
                             iconAsset: 'assets/ui/coins.png',
                             value: _fmt(widget.game.coins),
                             pillW: pillW,
                             pillH: pillH,
                           ),
-                          const SizedBox(width: 8),
+                          SizedBox(width: isCompact ? 6 : 8),
                           _buildWoodResourcePill(
                             iconAsset: 'assets/ui/dogfood.png',
                             value: _fmt(widget.game.kibble),
@@ -322,55 +331,16 @@ class _DogFactoryInsidePageState extends State<DogFactoryInsidePage> {
                           ),
                         ],
                       ),
-                    ],
-                  )
-                : Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      _buildBackButton(isCompact: false),
-                      Expanded(
-                        child: Center(
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
-                            child: FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: _buildTitlePlaque(isCompact: false),
-                            ),
-                          ),
-                        ),
-                      ),
-                      Flexible(
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          alignment: Alignment.centerRight,
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              _buildWoodResourcePill(
-                                iconAsset: 'assets/ui/diamonds.png',
-                                value: '${widget.game.crystals}',
-                              ),
-                              const SizedBox(width: 8),
-                              _buildWoodResourcePill(
-                                iconAsset: 'assets/ui/coins.png',
-                                value: _fmt(widget.game.coins),
-                              ),
-                              const SizedBox(width: 8),
-                              _buildWoodResourcePill(
-                                iconAsset: 'assets/ui/dogfood.png',
-                                value: _fmt(widget.game.kibble),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
+                ),
+              ],
+            ),
           ),
 
           // ── 3. Main Body Content (Center View) ──
           Positioned.fill(
-            top: isCompact ? 104 : 68,
+            top: 68,
             bottom: 12,
             left: isCompact ? 12 : 20,
             right: isCompact ? 12 : 20,
@@ -385,7 +355,7 @@ class _DogFactoryInsidePageState extends State<DogFactoryInsidePage> {
           // ── 4. Toast Notification Overlay ──
           if (_toastMessage != null)
             Positioned(
-              top: isCompact ? 108 : 72,
+              top: 72,
               left: 0,
               right: 0,
               child: Center(
@@ -516,13 +486,35 @@ class _DogFactoryInsidePageState extends State<DogFactoryInsidePage> {
     double pillW = 140.0,
     double pillH = 38.0,
   }) {
-    final double iconSize = (pillH * 0.55).clamp(16.0, 24.0);
+    final double iconSize = (pillH * 0.52).clamp(16.0, 24.0);
+    final double plusSize = (pillH * 0.46).clamp(16.0, 22.0);
+    final double fontSize = (pillH * 0.34).clamp(12.0, 15.0);
+
     return SizedBox(
       width: pillW,
       height: pillH,
       child: Stack(
+        clipBehavior: Clip.none,
         alignment: Alignment.center,
         children: [
+          Positioned(
+            left: pillW * 0.04,
+            right: pillW * 0.04,
+            top: pillH * 0.14,
+            bottom: pillH * 0.06,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(pillH * 0.45),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x66000000),
+                    blurRadius: 8,
+                    offset: Offset(0, 4),
+                  ),
+                ],
+              ),
+            ),
+          ),
           Positioned.fill(
             child: Image.asset(
               'assets/ui/ResourcesPlaceHolder.webp',
@@ -531,8 +523,8 @@ class _DogFactoryInsidePageState extends State<DogFactoryInsidePage> {
             ),
           ),
           Positioned(
-            left: pillW * 0.10,
-            top: pillH * 0.50 - iconSize / 2,
+            left: pillW * 0.18 - iconSize / 2,
+            top: (pillH - iconSize) / 2,
             width: iconSize,
             height: iconSize,
             child: Image.asset(
@@ -542,49 +534,72 @@ class _DogFactoryInsidePageState extends State<DogFactoryInsidePage> {
             ),
           ),
           Positioned(
-            left: pillW * 0.34,
-            right: pillW * 0.08,
+            left: pillW * 0.28,
+            right: pillW * 0.28,
             top: 0,
             bottom: 0,
             child: Center(
-              child: Text(
-                value,
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w900,
-                  fontSize: 14.0,
-                  fontFamily: 'Lilita One',
-                  letterSpacing: 0.4,
-                  shadows: [
-                    Shadow(
-                      color: Color(0xFF3B1404),
-                      offset: Offset(0, 1.5),
-                      blurRadius: 1,
-                    ),
-                    Shadow(
-                      color: Colors.black,
-                      offset: Offset(0, 2),
-                      blurRadius: 3,
-                    ),
-                  ],
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  value,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                    fontSize: fontSize,
+                    fontFamily: 'Lilita One',
+                    letterSpacing: 0.4,
+                    shadows: const [
+                      Shadow(
+                        color: Color(0xFF3B1404),
+                        offset: Offset(0, 1.5),
+                        blurRadius: 1,
+                      ),
+                      Shadow(
+                        color: Colors.black,
+                        offset: Offset(0, 2),
+                        blurRadius: 3,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
           Positioned(
-            right: 2,
-            top: pillH * 0.50 - 9,
-            width: 18,
-            height: 18,
-            child: Container(
-              decoration: const BoxDecoration(
-                color: Color(0xFFD97706),
-                shape: BoxShape.circle,
+            left: pillW * 0.82 - plusSize / 2,
+            top: (pillH - plusSize) / 2,
+            width: plusSize,
+            height: plusSize,
+            child: HoverScale(
+              scale: 1.12,
+              onTap: widget.onBackToWorld,
+              child: Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF4ADE80), Color(0xFF16A34A)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  border: Border.all(color: const Color(0xFFDCFCE7), width: 1.2),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x66000000),
+                      offset: Offset(0, 1.5),
+                      blurRadius: 2,
+                    ),
+                  ],
+                ),
+                alignment: Alignment.center,
+                child: Icon(
+                  Icons.add_rounded,
+                  color: Colors.white,
+                  size: plusSize * 0.72,
+                ),
               ),
-              child: const Icon(Icons.add, color: Colors.white, size: 12),
             ),
           ),
         ],

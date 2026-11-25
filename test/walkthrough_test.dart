@@ -1,5 +1,7 @@
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:dogtopia/components/common/walkthrough_overlay.dart';
 import 'package:dogtopia/models/food_recipe_model.dart';
 import 'package:dogtopia/models/walkthrough_step.dart';
 import 'package:dogtopia/state/game_controller.dart';
@@ -120,5 +122,64 @@ void main() {
     expect(game.walkthroughActive, isFalse);
     expect(game.walkthroughRewardClaimed, isFalse);
     expect(game.coins, initialCoins);
+  });
+
+  test('Steps 2 and 13 do not show an arrow', () {
+    expect(
+      WalkthroughStep.steps[1].id,
+      WalkthroughStepId.hudTour,
+    );
+    expect(
+      WalkthroughStep.steps[1].arrowDirection,
+      WalkthroughArrowDirection.none,
+    );
+    expect(
+      WalkthroughStep.steps[12].id,
+      WalkthroughStepId.shopAndGoals,
+    );
+    expect(
+      WalkthroughStep.steps[12].arrowDirection,
+      WalkthroughArrowDirection.none,
+    );
+  });
+
+  testWidgets('Welcome intro keeps only the X close button', (tester) async {
+    final game = GameController();
+
+    final worldTargetRect = ValueNotifier<Rect?>(null);
+    addTearDown(worldTargetRect.dispose);
+
+    await tester.pumpWidget(MaterialApp(
+      home: ListenableBuilder(
+        listenable: game,
+        builder: (context, _) => Stack(
+          children: [
+            const SizedBox.expand(),
+            WalkthroughOverlay(
+              game: game,
+              currentRoute: 'world',
+              targetKeys: const {},
+              worldTargetRectNotifier: worldTargetRect,
+              onReturnToWorld: () {},
+            ),
+          ],
+        ),
+      ),
+    ));
+    await tester.pump();
+
+    expect(find.text('WELCOME TO DOGTOPIA!'), findsOneWidget);
+    expect(find.text('SKIP TUTORIAL'), findsNothing);
+    expect(
+      find.image(
+        const AssetImage(
+          'assets/TrioUIKit_FreeSample_v2.2/png/1x/cozy/close_button.png',
+        ),
+      ),
+      findsOneWidget,
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    game.dispose();
   });
 }

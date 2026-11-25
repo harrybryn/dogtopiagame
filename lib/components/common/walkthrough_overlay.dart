@@ -774,7 +774,10 @@ class _WalkthroughOverlayState extends State<WalkthroughOverlay>
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          if (!isGraduation) ...[
+                          // The welcome intro already has the X close button,
+                          // so only later steps show the extra skip button.
+                          if (!isGraduation &&
+                              step.id != WalkthroughStepId.welcome) ...[
                             HoverScale(
                               scale: 1.05,
                               onTap: widget.game.skipWalkthrough,

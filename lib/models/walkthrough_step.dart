@@ -81,7 +81,6 @@ class WalkthroughStep {
           'Keep an eye on your Star Crystals, Paw Coins, and Kibble up here. Your Level & XP bar sits on the top-left!',
       requiredRoute: 'world',
       targetKeyId: WalkthroughTargets.hudResources,
-      arrowDirection: WalkthroughArrowDirection.up,
       ctaLabel: 'NEXT',
     ),
     WalkthroughStep(
@@ -192,7 +191,6 @@ class WalkthroughStep {
           'Use BUILD to buy new habitats, facilities, and dogs — and check GOALS on the left for bonus rewards!',
       requiredRoute: 'world',
       targetKeyId: WalkthroughTargets.hudBuild,
-      arrowDirection: WalkthroughArrowDirection.down,
       ctaLabel: 'NEXT',
     ),
     WalkthroughStep(

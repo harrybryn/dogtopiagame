@@ -159,4 +159,69 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     game.dispose();
   });
+
+  testWidgets('Friend visit lets you switch between friend islands',
+      (tester) async {
+    tester.view.physicalSize = const Size(900, 600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final game = GameController(startWalkthrough: false);
+    final friend = MockFriend.sample();
+
+    await tester.pumpWidget(MaterialApp(
+      home: FriendVisitPage(
+        game: game,
+        friend: friend,
+        onBackToWorld: () {},
+        onOpenHabitat: (_) {},
+      ),
+    ));
+    await tester.pump();
+
+    // Starts on Meadow Sanctuary with Sunny Garden
+    var grid = tester.widget<WorldIsometricGrid>(
+      find.byType(WorldIsometricGrid),
+    );
+    expect(grid.habitats.map((h) => h.name), contains('Sunny Garden'));
+    expect(grid.surfaceAsset, 'assets/ui/LandSurface.png');
+
+    // Open World Islands overview via the bottom-left ISLANDS badge and tap Frosty Peaks landsurface
+    await tester.tap(find.text('ISLANDS'));
+    await tester.pump();
+
+    await tester.tap(find.byKey(const ValueKey('friend_island_node_ice')));
+    await tester.pump();
+
+    grid = tester.widget<WorldIsometricGrid>(
+      find.byType(WorldIsometricGrid),
+    );
+    expect(grid.habitats.map((h) => h.name), contains('Glacier Lodge'));
+    expect(grid.surfaceAsset, 'assets/ui/IceSurface.png');
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    game.dispose();
+  });
+
+  testWidgets('Social dialog supports visiting all mock friends',
+      (tester) async {
+    tester.view.physicalSize = const Size(900, 600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    MockFriend? visited;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SocialDialog(
+          onVisitFriend: (friend) => visited = friend,
+        ),
+      ),
+    ));
+
+    expect(find.text('VISIT ISLAND'), findsNWidgets(MockFriend.allFriends().length));
+    await tester.tap(find.text('VISIT ISLAND').at(1));
+    expect(visited?.id, 'friend_mia');
+    expect(tester.takeException(), isNull);
+  });
 }

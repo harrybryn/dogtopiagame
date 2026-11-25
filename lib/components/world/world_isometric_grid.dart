@@ -43,13 +43,8 @@ bool isTileBuildable(int c, int r) {
   return true;
 }
 
-({
-  Offset pTop,
-  Offset pRight,
-  Offset pBottom,
-  Offset pLeft,
-  Offset center,
-}) getHabitatCorners(int col, int row, int w, int h) {
+({Offset pTop, Offset pRight, Offset pBottom, Offset pLeft, Offset center})
+getHabitatCorners(int col, int row, int w, int h) {
   final pTop = Offset(
     originX + (col - row) * (tileW / 2),
     originY + (col + row) * (tileH / 2) - tileH / 2,
@@ -66,10 +61,7 @@ bool isTileBuildable(int c, int r) {
     originX + (col - row - h) * (tileW / 2),
     originY + (col + row + h - 1) * (tileH / 2),
   );
-  final center = Offset(
-    (pTop.dx + pBottom.dx) / 2,
-    (pTop.dy + pBottom.dy) / 2,
-  );
+  final center = Offset((pTop.dx + pBottom.dx) / 2, (pTop.dy + pBottom.dy) / 2);
   return (
     pTop: pTop,
     pRight: pRight,
@@ -89,6 +81,9 @@ class WorldIsometricGrid extends StatefulWidget {
   final Function(String habitatId) onCollectCoins;
   final Function(String habitatId) onCollectDogfood;
   final Function(String habitatId)? onCompleteConstruction;
+  final Function(String habitatId)? onSpeedUpConstruction;
+  final String surfaceAsset;
+  final bool isOverview;
   final Function(int col, int row)? onConfirmPlace;
   final VoidCallback? onCancelPlace;
   final Function(HabitatModel)? onStartMove;
@@ -119,6 +114,9 @@ class WorldIsometricGrid extends StatefulWidget {
     required this.onCollectCoins,
     required this.onCollectDogfood,
     this.onCompleteConstruction,
+    this.onSpeedUpConstruction,
+    this.surfaceAsset = 'assets/ui/LandSurface.png',
+    this.isOverview = false,
     this.onConfirmPlace,
     this.onCancelPlace,
     this.onStartMove,
@@ -159,9 +157,17 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
 
     _oneSecTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) {
+        final now = DateTime.now().millisecondsSinceEpoch;
         setState(() {
-          _now = DateTime.now().millisecondsSinceEpoch;
+          _now = now;
         });
+        for (final hab in widget.habitats) {
+          if (hab.underConstruction &&
+              (hab.constructionEndsAt ?? 0) > 0 &&
+              now >= hab.constructionEndsAt!) {
+            widget.onCompleteConstruction?.call(hab.id);
+          }
+        }
       }
     });
 
@@ -188,7 +194,8 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
     if (widget.movingHabitatId != null) {
       final movingHab = widget.habitats.firstWhere(
         (h) => h.id == widget.movingHabitatId,
-        orElse: () => HabitatModel(id: '', habitatId: '', name: '', col: 11, row: 9),
+        orElse: () =>
+            HabitatModel(id: '', habitatId: '', name: '', col: 11, row: 9),
       );
       _ghostCol = movingHab.col;
       _ghostRow = movingHab.row;
@@ -200,7 +207,8 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
 
   bool _isTileUnlocked(int c, int r) {
     if (r >= 11) return true; // Entire bottom strip always unlocked
-    if (c < 13 && r < 11) return widget.isLot1Unlocked; // Expansion Lot 1 (Top-left / Bench)
+    if (c < 13 && r < 11)
+      return widget.isLot1Unlocked; // Expansion Lot 1 (Top-left / Bench)
     return widget.isLot2Unlocked; // Expansion Lot 2 (Top-right, locked)
   }
 
@@ -251,48 +259,53 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
 
   @override
   Widget build(BuildContext context) {
-    final allWorldEntities = <dynamic>[
-      ...widget.habitats.where((h) => h.id != widget.movingHabitatId),
-      ...widget.obstacles,
-    ]..sort((a, b) {
-        final colA = a is HabitatModel ? a.col : (a as ObstacleModel).col;
-        final rowA = a is HabitatModel ? a.row : (a as ObstacleModel).row;
-        final sizeA = a is HabitatModel
-            ? (a.sizeW + a.sizeH) * 0.5
-            : (a as ObstacleModel).sizeW * 0.5;
+    final allWorldEntities =
+        <dynamic>[
+          ...widget.habitats.where((h) => h.id != widget.movingHabitatId),
+          ...widget.obstacles,
+        ]..sort((a, b) {
+          final colA = a is HabitatModel ? a.col : (a as ObstacleModel).col;
+          final rowA = a is HabitatModel ? a.row : (a as ObstacleModel).row;
+          final sizeA = a is HabitatModel
+              ? (a.sizeW + a.sizeH) * 0.5
+              : (a as ObstacleModel).sizeW * 0.5;
 
-        final colB = b is HabitatModel ? b.col : (b as ObstacleModel).col;
-        final rowB = b is HabitatModel ? b.row : (b as ObstacleModel).row;
-        final sizeB = b is HabitatModel
-            ? (b.sizeW + b.sizeH) * 0.5
-            : (b as ObstacleModel).sizeW * 0.5;
+          final colB = b is HabitatModel ? b.col : (b as ObstacleModel).col;
+          final rowB = b is HabitatModel ? b.row : (b as ObstacleModel).row;
+          final sizeB = b is HabitatModel
+              ? (b.sizeW + b.sizeH) * 0.5
+              : (b as ObstacleModel).sizeW * 0.5;
 
-        return (colA + rowA + sizeA).compareTo(colB + rowB + sizeB);
-      });
+          return (colA + rowA + sizeA).compareTo(colB + rowB + sizeB);
+        });
 
     final isPlacing =
         widget.placingItem != null || widget.movingHabitatId != null;
-    final itemW = widget.placingItem?.sizeW ??
-        (widget.movingHabitatId != null
-            ? (widget.habitats
-                    .firstWhere((h) => h.id == widget.movingHabitatId,
-                        orElse: () => HabitatModel(
-                            id: '', habitatId: '', name: '', col: 0, row: 0))
-                    .sizeW)
-            : 3);
-    final itemH = widget.placingItem?.sizeH ?? 3;
-    final canPlaceGhost =
-        _isFootprintValid(_ghostCol, _ghostRow, itemW, itemH);
+    final movingHab = widget.movingHabitatId != null
+        ? widget.habitats.firstWhere(
+            (h) => h.id == widget.movingHabitatId,
+            orElse: () => HabitatModel(
+              id: '',
+              habitatId: '',
+              name: '',
+              col: 0,
+              row: 0,
+            ),
+          )
+        : null;
+    final itemW = widget.placingItem?.sizeW ?? movingHab?.sizeW ?? 3;
+    final itemH = widget.placingItem?.sizeH ?? movingHab?.sizeH ?? 3;
+    final canPlaceGhost = _isFootprintValid(_ghostCol, _ghostRow, itemW, itemH);
 
     final content = SizedBox(
       width: worldWidth,
       height: worldHeight,
       child: Stack(
         children: [
-          // ── Background Island Surface (LandSurface.webp) ──
+          // ── Background Island Surface ──
           Positioned.fill(
             child: Image.asset(
-              'assets/ui/LandSurface.png',
+              widget.surfaceAsset,
               fit: BoxFit.cover,
               filterQuality: FilterQuality.high,
             ),
@@ -358,8 +371,9 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
                 animation: _bounceController,
                 builder: (context, _) {
                   final targetHabitats = widget.habitats
-                      .where((h) =>
-                          widget.highlightedHabitatIds!.contains(h.id))
+                      .where(
+                        (h) => widget.highlightedHabitatIds!.contains(h.id),
+                      )
                       .toList();
                   if (targetHabitats.isEmpty) return const SizedBox.shrink();
                   return CustomPaint(
@@ -379,19 +393,17 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
             else if (entity is ObstacleModel)
               _buildObstacleWidget(entity, isPlacing),
 
+          // ── Construction Progress Overlays (topmost for hit-testing) ──
+          if (!isPlacing && !widget.isOverview)
+            for (final hab in widget.habitats)
+              if (hab.underConstruction && (hab.constructionEndsAt ?? 0) > _now)
+                _buildConstructionOverlay(hab),
+
           // ── 2 FOR SALE Wooden Signs on Locked Expansion Lots ──
-          if (!widget.isLot1Unlocked && !isPlacing)
-            _buildForSaleSign(
-              lotNumber: 1,
-              col: 5,
-              row: 4,
-            ),
-          if (!widget.isLot2Unlocked && !isPlacing)
-            _buildForSaleSign(
-              lotNumber: 2,
-              col: 18,
-              row: 4,
-            ),
+          if (!widget.isLot1Unlocked && !isPlacing && !widget.isOverview)
+            _buildForSaleSign(lotNumber: 1, col: 5, row: 4),
+          if (!widget.isLot2Unlocked && !isPlacing && !widget.isOverview)
+            _buildForSaleSign(lotNumber: 2, col: 18, row: 4),
 
           // ── Ghost Building Preview during Placement / Move ──
           if (isPlacing) _buildGhostPreview(itemW, itemH, canPlaceGhost),
@@ -418,14 +430,9 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
   Widget _buildHabitatWidget(HabitatModel hab, bool isPlacingMode) {
     final catItem = HabitatCatalog.findById(hab.habitatId);
 
-    // Construction state (30 seconds construction timer)
+    // Construction state
     final isUnderConstruction =
-        hab.underConstruction && (hab.constructionEndsAt ?? 0) > 0;
-    final remainingSeconds = isUnderConstruction
-        ? max(0, (((hab.constructionEndsAt ?? 0) - _now) / 1000).ceil())
-        : 0;
-    final isConstructionFinished =
-        isUnderConstruction && remainingSeconds == 0;
+        hab.underConstruction && (hab.constructionEndsAt ?? 0) > _now;
 
     // Use UnderConstruction asset when under construction
     final imageAsset = isUnderConstruction
@@ -440,7 +447,8 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
     final imgY = corners.pBottom.dy - imgH * 0.90;
 
     final isSelected = hab.id == widget.selectedHabitatId;
-    final isCompatible = widget.isSelectingHabitat &&
+    final isCompatible =
+        widget.isSelectingHabitat &&
         (widget.highlightedHabitatIds?.contains(hab.id) ?? false);
 
     return Positioned(
@@ -457,11 +465,11 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
             }
             return;
           }
-          if (isConstructionFinished) {
-            widget.onCompleteConstruction?.call(hab.id);
-            return;
+          if (hab.dogs.isNotEmpty) {
+            SoundManager.instance.playDogBark(isPuppy: hab.dogs.first.isPuppy);
+          } else {
+            SoundManager.instance.playClick();
           }
-          if (hab.dogs.isNotEmpty) { SoundManager.instance.playDogBark(isPuppy: hab.dogs.first.isPuppy); } else { SoundManager.instance.playClick(); }
           widget.onSelectHabitat(hab);
         },
         onPanUpdate: (details) {
@@ -490,8 +498,9 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
                         width: imgW * 1.12,
                         height: imgH * 1.12,
                         fit: BoxFit.contain,
-                        color: const Color(0xFF10B981)
-                            .withOpacity(glowPulse * 0.75),
+                        color: const Color(
+                          0xFF10B981,
+                        ).withOpacity(glowPulse * 0.75),
                         colorBlendMode: BlendMode.srcIn,
                         filterQuality: FilterQuality.high,
                       ),
@@ -501,8 +510,9 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
                         width: imgW * 1.05,
                         height: imgH * 1.05,
                         fit: BoxFit.contain,
-                        color: const Color(0xFFFEF08A)
-                            .withOpacity(glowPulse * 0.85),
+                        color: const Color(
+                          0xFFFEF08A,
+                        ).withOpacity(glowPulse * 0.85),
                         colorBlendMode: BlendMode.srcIn,
                         filterQuality: FilterQuality.high,
                       ),
@@ -516,7 +526,8 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
               AnimatedBuilder(
                 animation: _bounceController,
                 builder: (context, _) {
-                  final glowPulse = 0.55 + 0.20 * sin(_bounceController.value * 2 * pi);
+                  final glowPulse =
+                      0.55 + 0.20 * sin(_bounceController.value * 2 * pi);
                   return Image.asset(
                     imageAsset,
                     width: imgW * 1.03,
@@ -531,8 +542,9 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
 
             // Habitat Artwork (or UnderConstruction asset, dimmed if not compatible in selection mode)
             Opacity(
-              opacity:
-                  (widget.isSelectingHabitat && !isCompatible) ? 0.38 : 1.0,
+              opacity: (widget.isSelectingHabitat && !isCompatible)
+                  ? 0.38
+                  : 1.0,
               child: Image.asset(
                 imageAsset,
                 width: imgW,
@@ -562,7 +574,11 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
             ],
 
             // ── Floating Coin Collection Bubble (Using CollectPlaceHolder asset) ──
-            if (!isUnderConstruction && !widget.isSelectingHabitat && hab.readyToCollect && hab.coinsAccumulated > 0)
+            if (!isUnderConstruction &&
+                !widget.isSelectingHabitat &&
+                !widget.isOverview &&
+                hab.readyToCollect &&
+                hab.coinsAccumulated > 0)
               AnimatedBuilder(
                 animation: _bounceController,
                 builder: (_, __) {
@@ -608,7 +624,11 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
               ),
 
             // ── Floating Dogfood Collection Bubble (Using CollectPlaceHolder asset) ──
-            if (!isUnderConstruction && !widget.isSelectingHabitat && hab.readyToCollectDogfood && hab.dogfoodAccumulated > 0)
+            if (!isUnderConstruction &&
+                !widget.isSelectingHabitat &&
+                !widget.isOverview &&
+                hab.readyToCollectDogfood &&
+                hab.dogfoodAccumulated > 0)
               AnimatedBuilder(
                 animation: _bounceController,
                 builder: (_, __) {
@@ -652,177 +672,149 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
                   );
                 },
               ),
+          ],
+        ),
+      ),
+    );
+  }
 
-            // ── 1. Real-Time 30s Construction Progress HUD directly over the building ──
-            if (isUnderConstruction && !isConstructionFinished)
-              Positioned(
-                top: -68,
-                left: (imgW - 170) / 2,
-                width: 170,
-                child: Column(
+  Widget _buildConstructionOverlay(HabitatModel hab) {
+    final remainingSeconds = max(
+      0,
+      (((hab.constructionEndsAt ?? 0) - _now) / 1000).ceil(),
+    );
+    if (remainingSeconds == 0) {
+      return const SizedBox.shrink();
+    }
+
+    final totalDuration = max(1, hab.constructionDuration);
+    final hrs = remainingSeconds ~/ 3600;
+    final mins = (remainingSeconds % 3600) ~/ 60;
+    final secs = remainingSeconds % 60;
+    final timeLabel = hrs > 0
+        ? '${hrs}h ${mins.toString().padLeft(2, '0')}m'
+        : (mins > 0
+            ? '${mins}m ${secs.toString().padLeft(2, '0')}s'
+            : '${remainingSeconds}s');
+    final speedUpCost = remainingSeconds <= 120
+        ? 2
+        : (remainingSeconds <= 900
+            ? 5
+            : (remainingSeconds <= 7200 ? 10 : 20));
+
+    final corners = getHabitatCorners(hab.col, hab.row, hab.sizeW, hab.sizeH);
+    final footprintW = corners.pRight.dx - corners.pLeft.dx;
+    final imgW = footprintW * 1.08;
+    final imgH = imgW * 0.666;
+    final imgX = corners.center.dx - imgW / 2;
+    final imgY = corners.pBottom.dy - imgH * 0.90;
+
+    return Positioned(
+      top: imgY - 68,
+      left: imgX + (imgW - 170) / 2,
+      width: 170,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0xEE2A1205),
+                  borderRadius: BorderRadius.circular(12),
+                  border:
+                      Border.all(color: const Color(0xFFFBBF24), width: 1.2),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x66000000),
+                      blurRadius: 4,
+                      offset: Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Top Row: Timer Pill & Speed Up Button
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        // Timer Pill
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: const Color(0xEE2A1205),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                                color: const Color(0xFFFBBF24), width: 1.2),
-                            boxShadow: const [
-                              BoxShadow(
-                                color: Color(0x66000000),
-                                blurRadius: 4,
-                                offset: Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.construction_rounded,
-                                  size: 12, color: Color(0xFFFEF08A)),
-                              const SizedBox(width: 4),
-                              Text(
-                                '${remainingSeconds}s',
-                                style: const TextStyle(
-                                  fontFamily: 'Lilita One',
-                                  fontSize: 11,
-                                  color: Color(0xFFFEF08A),
-                                  fontWeight: FontWeight.w900,
-                                  height: 1.0,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        // SPEED UP Button
-                        HoverScale(
-                          scale: 1.06,
-                          onTap: () =>
-                              widget.onCompleteConstruction?.call(hab.id),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                              ),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                  color: const Color(0xFFFEF3C7), width: 1.2),
-                              boxShadow: const [
-                                BoxShadow(
-                                  color: Color(0x66000000),
-                                  blurRadius: 4,
-                                  offset: Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Image.asset(
-                                  'assets/ui/diamonds.png',
-                                  width: 12,
-                                  height: 12,
-                                  fit: BoxFit.contain,
-                                ),
-                                const SizedBox(width: 3),
-                                const Text(
-                                  'SPEED UP',
-                                  style: TextStyle(
-                                    fontFamily: 'Lilita One',
-                                    fontSize: 10,
-                                    color: Color(0xFF3B1404),
-                                    fontWeight: FontWeight.w900,
-                                    height: 1.0,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 5),
-
-                    // Bottom Row: LoadingProgressBar (Game authentic bar)
-                    SizedBox(
-                      width: 170,
-                      height: 16,
-                      child: LoadingProgressBar(
-                        progress:
-                            (((30 - remainingSeconds) / 30) * 100).clamp(0.0, 100.0),
+                    const Icon(Icons.construction_rounded,
+                        size: 12, color: Color(0xFFFEF08A)),
+                    const SizedBox(width: 4),
+                    Text(
+                      timeLabel,
+                      style: const TextStyle(
+                        fontFamily: 'Lilita One',
+                        fontSize: 11,
+                        color: Color(0xFFFEF08A),
+                        fontWeight: FontWeight.w900,
+                        height: 1.0,
                       ),
                     ),
                   ],
                 ),
               ),
-
-            // ── 2. Construction Finished Button (COMPLETE!) ──
-            if (isConstructionFinished)
-              Positioned(
-                top: -55,
-                left: (imgW - 140) / 2,
-                width: 140,
-                child: HoverScale(
-                  scale: 1.1,
-                  onTap: () =>
-                      widget.onCompleteConstruction?.call(hab.id),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF10B981), Color(0xFF047857)],
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
+              HoverScale(
+                scale: 1.06,
+                onTap: () => (widget.onSpeedUpConstruction ??
+                        widget.onCompleteConstruction)
+                    ?.call(hab.id),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                    border:
+                        Border.all(color: const Color(0xFFFEF3C7), width: 1.2),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x66000000),
+                        blurRadius: 4,
+                        offset: Offset(0, 2),
                       ),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                          color: const Color(0xFFA7F3D0), width: 2.0),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Color(0x80047857),
-                          blurRadius: 12,
-                          spreadRadius: 2,
-                          offset: Offset(0, 4),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Image.asset(
+                        'assets/ui/diamonds.png',
+                        width: 12,
+                        height: 12,
+                        fit: BoxFit.contain,
+                      ),
+                      const SizedBox(width: 3),
+                      Text(
+                        '$speedUpCost SPEED UP',
+                        style: const TextStyle(
+                          fontFamily: 'Lilita One',
+                          fontSize: 10,
+                          color: Color(0xFF3B1404),
+                          fontWeight: FontWeight.w900,
+                          height: 1.0,
                         ),
-                      ],
-                    ),
-                    child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.check_rounded, color: Colors.white, size: 18),
-                        SizedBox(width: 6),
-                        Text(
-                          'COMPLETE!',
-                          style: TextStyle(
-                            fontFamily: 'Lilita One',
-                            fontSize: 13,
-                            color: Colors.white,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 0.5,
-                            height: 1.0,
-                          ),
-                        ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-          ],
-        ),
+            ],
+          ),
+          const SizedBox(height: 5),
+          SizedBox(
+            width: 170,
+            height: 16,
+            child: LoadingProgressBar(
+              progress: (((totalDuration - remainingSeconds) / totalDuration) *
+                      100)
+                  .clamp(0.0, 100.0),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1008,8 +1000,11 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.touch_app_rounded,
-                  color: Color(0xFFFDE047), size: 14),
+              const Icon(
+                Icons.touch_app_rounded,
+                color: Color(0xFFFDE047),
+                size: 14,
+              ),
               const SizedBox(width: 4),
               Text(
                 '${hab.name.toUpperCase()} (${hab.dogs.length}/4)',
@@ -1068,9 +1063,7 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
     final double scaleMultiplier = obs.sizeW == 1 ? 1.55 : 1.25;
     final double aspect = obs.type == 'tree'
         ? (1199.0 / 1312.0)
-        : (obs.type == 'tree_rock'
-            ? (1145.0 / 1374.0)
-            : (1024.0 / 1536.0));
+        : (obs.type == 'tree_rock' ? (1145.0 / 1374.0) : (1024.0 / 1536.0));
     final imgW = footprintW * scaleMultiplier;
     final imgH = imgW * aspect;
     final imgX = corners.center.dx - imgW / 2;
@@ -1087,8 +1080,11 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
         ? (1.0 - (remainingSeconds / max(1, obs.clearDuration))).clamp(0.0, 1.0)
         : 0.0;
 
-    final isLockedLot = (obs.col < 13 && obs.row < 11 && !widget.isLot1Unlocked) ||
-        (obs.col >= 13 && obs.row < 11 && !widget.isLot2Unlocked); // Top-right only
+    final isLockedLot =
+        (obs.col < 13 && obs.row < 11 && !widget.isLot1Unlocked) ||
+        (obs.col >= 13 &&
+            obs.row < 11 &&
+            !widget.isLot2Unlocked); // Top-right only
 
     return Positioned(
       left: imgX,
@@ -1152,12 +1148,16 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
                     // Timer Badge
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 3),
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
                       decoration: BoxDecoration(
                         color: const Color(0xEE2A1205),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                            color: const Color(0xFFFBBF24), width: 1.2),
+                          color: const Color(0xFFFBBF24),
+                          width: 1.2,
+                        ),
                         boxShadow: const [
                           BoxShadow(
                             color: Color(0x66000000),
@@ -1169,8 +1169,11 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.timer_outlined,
-                              color: Color(0xFFFBBF24), size: 12),
+                          const Icon(
+                            Icons.timer_outlined,
+                            color: Color(0xFFFBBF24),
+                            size: 12,
+                          ),
                           const SizedBox(width: 4),
                           Text(
                             '00:${remainingSeconds.toString().padLeft(2, '0')}',
@@ -1226,7 +1229,9 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
                   onTap: () => widget.onCompleteClearingObstacle?.call(obs.id),
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 4),
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       gradient: const LinearGradient(
                         colors: [Color(0xFF10B981), Color(0xFF059669)],
@@ -1244,8 +1249,11 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
                     child: const Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.check_rounded,
-                            color: Colors.white, size: 16),
+                        Icon(
+                          Icons.check_rounded,
+                          color: Colors.white,
+                          size: 16,
+                        ),
                         SizedBox(width: 4),
                         Text(
                           'CLEARED!',
@@ -1304,8 +1312,7 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
                 height: 18,
                 child: Container(
                   decoration: const BoxDecoration(
-                    borderRadius:
-                        BorderRadius.all(Radius.elliptical(75, 18)),
+                    borderRadius: BorderRadius.all(Radius.elliptical(75, 18)),
                     gradient: RadialGradient(
                       colors: [Color(0x99000000), Colors.transparent],
                     ),
@@ -1330,7 +1337,6 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
       ),
     );
   }
-
 }
 
 class _GridPainter extends CustomPainter {
@@ -1371,7 +1377,8 @@ class _GridPainter extends CustomPainter {
       for (int r = 0; r < gridRows; r++) {
         if (!isTileBuildable(c, r)) continue;
 
-        final isGhostTile = ghostCol != null &&
+        final isGhostTile =
+            ghostCol != null &&
             ghostRow != null &&
             c >= ghostCol! &&
             c < ghostCol! + ghostW &&
@@ -1411,7 +1418,9 @@ class _GridPainter extends CustomPainter {
         ..style = PaintingStyle.fill;
 
       final strokePaint = Paint()
-        ..color = isGhostValid ? const Color(0xFF22C55E) : const Color(0xFFEF4444)
+        ..color = isGhostValid
+            ? const Color(0xFF22C55E)
+            : const Color(0xFFEF4444)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2.0;
 
@@ -1477,10 +1486,9 @@ class _GridPainter extends CustomPainter {
       canvas.drawPath(
         perimeterPath,
         Paint()
-          ..color = (isGhostValid
-                  ? const Color(0xFF4ADE80)
-                  : const Color(0xFFF87171))
-              .withOpacity(0.40)
+          ..color =
+              (isGhostValid ? const Color(0xFF4ADE80) : const Color(0xFFF87171))
+                  .withOpacity(0.40)
           ..style = PaintingStyle.stroke
           ..strokeWidth = 6.0
           ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4.0),
@@ -1567,10 +1575,7 @@ class _CompatibleHabitatsBasePainter extends CustomPainter {
   final List<HabitatModel> habitats;
   final double pulse;
 
-  _CompatibleHabitatsBasePainter({
-    required this.habitats,
-    required this.pulse,
-  });
+  _CompatibleHabitatsBasePainter({required this.habitats, required this.pulse});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1613,7 +1618,8 @@ class _CompatibleHabitatsBasePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _CompatibleHabitatsBasePainter oldDelegate) => true;
+  bool shouldRepaint(covariant _CompatibleHabitatsBasePainter oldDelegate) =>
+      true;
 }
 
 class _TriangleArrowTipPainter extends CustomPainter {
@@ -1690,11 +1696,12 @@ class _LockedLotTerritoryPainter extends CustomPainter {
       }
     }
 
-    // 2. Full-width boundary line along row = 11 (separates unlocked bottom from locked top)
-    // Spans entire width (c = 0..gridCols) since r >= 11 is now all unlocked
+    // 2. Boundary line along row = 11 (only for segments whose lot is still locked)
     if (!isLot1Unlocked || !isLot2Unlocked) {
       for (int c = 0; c < gridCols; c++) {
-        if (isTileBuildable(c, 11)) {
+        final segmentLocked =
+            (c < 13 && !isLot1Unlocked) || (c >= 13 && !isLot2Unlocked);
+        if (segmentLocked && isTileBuildable(c, 11)) {
           final cx = originX + (c - 11) * (tileW / 2);
           final cy = originY + (c + 11) * (tileH / 2);
           final pTop = Offset(cx, cy - tileH / 2);

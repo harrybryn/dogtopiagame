@@ -10,6 +10,7 @@ import '../models/obstacle_model.dart';
 import '../models/food_recipe_model.dart';
 import '../models/level_milestone.dart';
 import '../models/walkthrough_step.dart';
+import '../models/island_model.dart';
 import '../services/audio_service.dart';
 
 class GameController extends ChangeNotifier {
@@ -46,12 +47,17 @@ class GameController extends ChangeNotifier {
   // Selected habitat for HUD interaction
   String? _selectedHabitatId;
 
-  // Lot expansion state (2 Lots for sale: Lot 1 = Top/Bench [c < 13, r < 11], Lot 2 = Right [c >= 13])
-  bool _isLot1Unlocked = false;
-  bool _isLot2Unlocked = false;
+  // Lot expansion state per island (Lot 1 = Top/Bench [c < 13, r < 11], Lot 2 = Right [c >= 13])
+  Map<String, Set<int>> _unlockedLotsByIsland = {};
 
-  // Obstacles scattered across the island (clearable with gold)
-  List<ObstacleModel> _obstacles = ObstacleModel.defaultObstacles();
+  // Island surfaces state
+  String _currentIslandId = IslandCatalog.starterIslandId;
+  Set<String> _unlockedIslandIds = {IslandCatalog.starterIslandId};
+
+  // Obstacles per island (clearable with gold)
+  Map<String, List<ObstacleModel>> _obstaclesByIsland = {
+    IslandCatalog.starterIslandId: ObstacleModel.defaultObstacles(),
+  };
   String? _selectedObstacleId;
 
   Timer? _incomeTimer;
@@ -93,10 +99,23 @@ class GameController extends ChangeNotifier {
   List<HabitatModel> get placedHabitats => _placedHabitats;
   List<TaskModel> get tasks => _tasks;
   String? get selectedHabitatId => _selectedHabitatId;
-  bool get isLot1Unlocked => _isLot1Unlocked;
-  bool get isLot2Unlocked => _isLot2Unlocked;
-  bool get isLotExpansionUnlocked => _isLot1Unlocked && _isLot2Unlocked;
-  List<ObstacleModel> get obstacles => _obstacles;
+  bool isLotUnlockedForIsland(String islandId, int lotNumber) =>
+      _unlockedLotsByIsland[islandId]?.contains(lotNumber) ?? false;
+  bool get isLot1Unlocked => isLotUnlockedForIsland(_currentIslandId, 1);
+  bool get isLot2Unlocked => isLotUnlockedForIsland(_currentIslandId, 2);
+  bool get isLotExpansionUnlocked => isLot1Unlocked && isLot2Unlocked;
+  String get currentIslandId => _currentIslandId;
+  IslandDefinition get currentIsland => IslandCatalog.findById(_currentIslandId);
+  Set<String> get unlockedIslandIds => Set.unmodifiable(_unlockedIslandIds);
+  bool isIslandUnlocked(String id) => _unlockedIslandIds.contains(id);
+  List<HabitatModel> get currentIslandHabitats =>
+      _placedHabitats.where((h) => h.islandId == _currentIslandId).toList();
+  List<ObstacleModel> obstaclesForIsland(String islandId) =>
+      _obstaclesByIsland.putIfAbsent(
+          islandId, () => ObstacleModel.defaultObstacles());
+  List<ObstacleModel> get currentIslandObstacles =>
+      obstaclesForIsland(_currentIslandId);
+  List<ObstacleModel> get obstacles => obstaclesForIsland(_currentIslandId);
   String? get selectedObstacleId => _selectedObstacleId;
 
   bool get walkthroughActive => _walkthroughActive;
@@ -170,13 +189,23 @@ class GameController extends ChangeNotifier {
       'sfxVolume': _sfxVolume,
       'bgmVolume': _bgmVolume,
       'gridVisible': _gridVisible,
-      'isLot1Unlocked': _isLot1Unlocked,
-      'isLot2Unlocked': _isLot2Unlocked,
+      'isLot1Unlocked': isLotUnlockedForIsland(IslandCatalog.starterIslandId, 1),
+      'isLot2Unlocked': isLotUnlockedForIsland(IslandCatalog.starterIslandId, 2),
+      'unlockedLotsByIsland': _unlockedLotsByIsland.map(
+        (k, v) => MapEntry(k, v.toList()..sort()),
+      ),
+      'currentIslandId': _currentIslandId,
+      'unlockedIslandIds': _unlockedIslandIds.toList(),
       'walkthroughCompleted': _walkthroughCompleted,
       'walkthroughRewardClaimed': _walkthroughRewardClaimed,
       'claimedLevelMilestones': _claimedLevelMilestones.toList()..sort(),
       'placedHabitats': _placedHabitats.map((h) => h.toJson()).toList(),
-      'obstacles': _obstacles.map((o) => o.toJson()).toList(),
+      'obstacles': obstaclesForIsland(IslandCatalog.starterIslandId)
+          .map((o) => o.toJson())
+          .toList(),
+      'obstaclesByIsland': _obstaclesByIsland.map(
+        (k, v) => MapEntry(k, v.map((o) => o.toJson()).toList()),
+      ),
       'tasks': _tasks.map((t) => t.toJson()).toList(),
     };
   }
@@ -197,8 +226,33 @@ class GameController extends ChangeNotifier {
     _bgmVolume = (json['bgmVolume'] as num?)?.toDouble() ?? 0.5;
     _gridVisible = json['gridVisible'] as bool? ?? false;
 
-    _isLot1Unlocked = json['isLot1Unlocked'] as bool? ?? false;
-    _isLot2Unlocked = json['isLot2Unlocked'] as bool? ?? false;
+    _unlockedLotsByIsland = {};
+    final rawLotsByIsland = json['unlockedLotsByIsland'] as Map<String, dynamic>?;
+    if (rawLotsByIsland != null) {
+      for (final entry in rawLotsByIsland.entries) {
+        final list = entry.value as List<dynamic>? ?? [];
+        _unlockedLotsByIsland[entry.key] =
+            list.map((e) => (e as num).toInt()).toSet();
+      }
+    } else {
+      final legacyLot1 = json['isLot1Unlocked'] as bool? ?? false;
+      final legacyLot2 = json['isLot2Unlocked'] as bool? ?? false;
+      final starterLots = <int>{};
+      if (legacyLot1) starterLots.add(1);
+      if (legacyLot2) starterLots.add(2);
+      if (starterLots.isNotEmpty) {
+        _unlockedLotsByIsland[IslandCatalog.starterIslandId] = starterLots;
+      }
+    }
+    _currentIslandId =
+        json['currentIslandId'] as String? ?? IslandCatalog.starterIslandId;
+    final rawIslands = json['unlockedIslandIds'] as List<dynamic>?;
+    _unlockedIslandIds = rawIslands != null && rawIslands.isNotEmpty
+        ? rawIslands.map((e) => e.toString()).toSet()
+        : {IslandCatalog.starterIslandId};
+    if (!_unlockedIslandIds.contains(_currentIslandId)) {
+      _currentIslandId = IslandCatalog.starterIslandId;
+    }
 
     _walkthroughCompleted = json['walkthroughCompleted'] as bool? ?? false;
     _walkthroughRewardClaimed =
@@ -218,11 +272,26 @@ class GameController extends ChangeNotifier {
           .toList();
     }
 
-    final rawObstacles = json['obstacles'] as List<dynamic>?;
-    if (rawObstacles != null) {
-      _obstacles = rawObstacles
-          .map((o) => ObstacleModel.fromJson(Map<String, dynamic>.from(o as Map)))
-          .toList();
+    _obstaclesByIsland = {};
+    final rawObsByIsland = json['obstaclesByIsland'] as Map<String, dynamic>?;
+    if (rawObsByIsland != null) {
+      for (final entry in rawObsByIsland.entries) {
+        final list = entry.value as List<dynamic>? ?? [];
+        _obstaclesByIsland[entry.key] = list
+            .map((o) => ObstacleModel.fromJson(Map<String, dynamic>.from(o as Map)))
+            .toList();
+      }
+    } else {
+      final rawObstacles = json['obstacles'] as List<dynamic>?;
+      if (rawObstacles != null) {
+        _obstaclesByIsland[IslandCatalog.starterIslandId] = rawObstacles
+            .map((o) =>
+                ObstacleModel.fromJson(Map<String, dynamic>.from(o as Map)))
+            .toList();
+      } else {
+        _obstaclesByIsland[IslandCatalog.starterIslandId] =
+            ObstacleModel.defaultObstacles();
+      }
     }
 
     final rawTasks = json['tasks'] as List<dynamic>?;
@@ -383,14 +452,14 @@ class GameController extends ChangeNotifier {
 
   bool isTileUnlocked(int col, int row) {
     if (row >= 11) return true; // Entire bottom strip always unlocked (starter + south expansion)
-    if (col < 13 && row < 11) return _isLot1Unlocked; // Expansion Lot 1 (Top-left / Bench)
-    return _isLot2Unlocked; // Expansion Lot 2 (Top-right, locked)
+    if (col < 13 && row < 11) return isLot1Unlocked; // Expansion Lot 1 (Top-left / Bench)
+    return isLot2Unlocked; // Expansion Lot 2 (Top-right, locked)
   }
 
   ObstacleModel? get selectedObstacle {
     if (_selectedObstacleId == null) return null;
     try {
-      return _obstacles.firstWhere((o) => o.id == _selectedObstacleId);
+      return currentIslandObstacles.firstWhere((o) => o.id == _selectedObstacleId);
     } catch (_) {
       return null;
     }
@@ -406,7 +475,7 @@ class GameController extends ChangeNotifier {
   }
 
   bool unlockLot1() {
-    if (_isLot1Unlocked) return false;
+    if (isLot1Unlocked) return false;
     const cost = 2500;
     if (_coins < cost) {
       SoundManager.instance.playSadWhimper();
@@ -414,7 +483,7 @@ class GameController extends ChangeNotifier {
     }
 
     _coins -= cost;
-    _isLot1Unlocked = true;
+    _unlockedLotsByIsland.putIfAbsent(_currentIslandId, () => {}).add(1);
     _addXp(120);
     SoundManager.instance.playLevelUp();
     notifyListeners();
@@ -422,7 +491,7 @@ class GameController extends ChangeNotifier {
   }
 
   bool unlockLot2() {
-    if (_isLot2Unlocked) return false;
+    if (isLot2Unlocked) return false;
     const cost = 2500;
     if (_coins < cost) {
       SoundManager.instance.playSadWhimper();
@@ -430,7 +499,7 @@ class GameController extends ChangeNotifier {
     }
 
     _coins -= cost;
-    _isLot2Unlocked = true;
+    _unlockedLotsByIsland.putIfAbsent(_currentIslandId, () => {}).add(2);
     _addXp(120);
     SoundManager.instance.playLevelUp();
     notifyListeners();
@@ -438,13 +507,45 @@ class GameController extends ChangeNotifier {
   }
 
   bool unlockLotExpansion() {
-    if (!_isLot1Unlocked) return unlockLot1();
-    if (!_isLot2Unlocked) return unlockLot2();
+    if (!isLot1Unlocked) return unlockLot1();
+    if (!isLot2Unlocked) return unlockLot2();
     return false;
   }
 
+  bool unlockIsland(String islandId) {
+    if (_unlockedIslandIds.contains(islandId)) return false;
+    final island = IslandCatalog.findById(islandId);
+    if (_level < island.requiredLevel ||
+        !canAfford(island.costCoins, island.costCrystals)) {
+      SoundManager.instance.playSadWhimper();
+      return false;
+    }
+
+    _coins -= island.costCoins;
+    _crystals -= island.costCrystals;
+    _unlockedIslandIds.add(islandId);
+    _currentIslandId = islandId;
+    _selectedHabitatId = null;
+    _selectedObstacleId = null;
+    _addXp(200);
+    SoundManager.instance.playLevelUp();
+    notifyListeners();
+    return true;
+  }
+
+  void switchIsland(String islandId) {
+    if (!_unlockedIslandIds.contains(islandId)) return;
+    if (_currentIslandId == islandId) return;
+    _currentIslandId = islandId;
+    _selectedHabitatId = null;
+    _selectedObstacleId = null;
+    SoundManager.instance.playClick();
+    notifyListeners();
+  }
+
   bool startClearingObstacle(String obstacleId) {
-    final obs = _obstacles.firstWhere(
+    final list = obstaclesForIsland(_currentIslandId);
+    final obs = list.firstWhere(
       (o) => o.id == obstacleId,
       orElse: () => ObstacleModel(
           id: '', type: '', name: '', col: 0, row: 0, imageAsset: ''),
@@ -466,12 +567,13 @@ class GameController extends ChangeNotifier {
   }
 
   bool completeClearingObstacle(String obstacleId) {
-    final idx = _obstacles.indexWhere((o) => o.id == obstacleId);
+    final list = obstaclesForIsland(_currentIslandId);
+    final idx = list.indexWhere((o) => o.id == obstacleId);
     if (idx == -1) return false;
 
-    final obs = _obstacles[idx];
+    final obs = list[idx];
     _addXp(obs.xpReward);
-    _obstacles.removeAt(idx);
+    list.removeAt(idx);
     if (_selectedObstacleId == obstacleId) {
       _selectedObstacleId = null;
     }
@@ -481,7 +583,8 @@ class GameController extends ChangeNotifier {
   }
 
   bool speedUpClearingObstacle(String obstacleId, int crystalsCost) {
-    final obs = _obstacles.firstWhere(
+    final list = obstaclesForIsland(_currentIslandId);
+    final obs = list.firstWhere(
       (o) => o.id == obstacleId,
       orElse: () => ObstacleModel(
           id: '', type: '', name: '', col: 0, row: 0, imageAsset: ''),
@@ -575,6 +678,15 @@ class GameController extends ChangeNotifier {
     final now = DateTime.now().millisecondsSinceEpoch;
 
     for (final h in _placedHabitats) {
+      if (h.underConstruction &&
+          h.constructionEndsAt != null &&
+          now >= h.constructionEndsAt!) {
+        h.underConstruction = false;
+        h.constructionEndsAt = null;
+        _addXp(50);
+        SoundManager.instance.playLevelUp();
+        changed = true;
+      }
       if (h.isFactory) {
         // Dragon City Farm logic: Check if active baking finished
         if (h.bakingEndsAt != null && !h.readyToCollectDogfood) {
@@ -714,6 +826,10 @@ class GameController extends ChangeNotifier {
   }
 
   bool placeHabitat(HabitatCatalogItem item, int col, int row) {
+    if (!IslandCatalog.isItemAllowedOnIsland(item, _currentIslandId)) {
+      SoundManager.instance.playSadWhimper();
+      return false;
+    }
     if (!canAfford(item.costCoins, item.costCrystals)) {
       SoundManager.instance.playSadWhimper();
       return false;
@@ -728,6 +844,7 @@ class GameController extends ChangeNotifier {
       id: 'hab_$now',
       type: item.type,
       habitatId: item.id,
+      islandId: _currentIslandId,
       name: item.name,
       col: col,
       row: row,
@@ -736,8 +853,8 @@ class GameController extends ChangeNotifier {
       maxCoins: item.maxCoins,
       maxDogfood: item.maxDogfood,
       underConstruction: true,
-      constructionDuration: 30,
-      constructionEndsAt: now + 30 * 1000,
+      constructionDuration: item.buildDurationSeconds,
+      constructionEndsAt: now + item.buildDurationSeconds * 1000,
     );
 
     _placedHabitats.add(newHab);
@@ -770,6 +887,39 @@ class GameController extends ChangeNotifier {
         break;
       }
     }
+  }
+
+  static int speedUpCostForSeconds(int remainingSeconds) {
+    if (remainingSeconds <= 120) return 2;
+    if (remainingSeconds <= 900) return 5;
+    if (remainingSeconds <= 7200) return 10;
+    return 20;
+  }
+
+  bool speedUpConstruction(String habitatId, {int? crystalsCost}) {
+    final hab = _placedHabitats.firstWhere(
+      (h) => h.id == habitatId,
+      orElse: () => HabitatModel(
+        id: '',
+        habitatId: '',
+        name: '',
+        col: 0,
+        row: 0,
+      ),
+    );
+    if (hab.id.isEmpty || !hab.underConstruction) return false;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final remainingSec =
+        max(0, (((hab.constructionEndsAt ?? 0) - now) / 1000).ceil());
+    final cost = crystalsCost ?? speedUpCostForSeconds(remainingSec);
+    if (_crystals < cost) {
+      SoundManager.instance.playSadWhimper();
+      return false;
+    }
+
+    _crystals -= cost;
+    completeConstruction(habitatId);
+    return true;
   }
 
   bool adoptDog(DogCatalogItem dogItem, String targetHabitatId) {

@@ -29,6 +29,13 @@ class SkyBackground extends StatefulWidget {
   /// height (0.0 = top, 1.0 = bottom). Defaults to 0.10.
   final double cloudTopFraction;
 
+  /// Optional scale applied to the animated cloud layer (e.g. when zooming
+  /// the world map). Defaults to 1.0.
+  final double cloudScale;
+
+  /// Optional translation offset applied to the animated cloud layer.
+  final Offset cloudOffset;
+
   const SkyBackground({
     super.key,
     this.child,
@@ -37,6 +44,8 @@ class SkyBackground extends StatefulWidget {
     this.landHeightFraction = 0.45,
     this.cloudHeightFraction = 0.35,
     this.cloudTopFraction = 0.10,
+    this.cloudScale = 1.0,
+    this.cloudOffset = Offset.zero,
   });
 
   @override
@@ -84,19 +93,25 @@ class _SkyBackgroundState extends State<SkyBackground>
           ),
         ),
 
-        // ── Layer 2: Sliding mirrored clouds ──
+        // ── Layer 2: Sliding mirrored clouds (overscanned so zoom/pan never crops edges) ──
         Positioned(
-          left: 0,
-          right: 0,
+          left: -800,
+          right: -800,
           top: MediaQuery.of(context).size.height * widget.cloudTopFraction,
           height: MediaQuery.of(context).size.height * widget.cloudHeightFraction,
-          child: AnimatedBuilder(
-            animation: _cloudController,
-            builder: (context, child) {
-              return _SlidingClouds(
-                progress: _cloudController.value,
-              );
-            },
+          child: Transform.translate(
+            offset: widget.cloudOffset,
+            child: Transform.scale(
+              scale: widget.cloudScale,
+              child: AnimatedBuilder(
+                animation: _cloudController,
+                builder: (context, child) {
+                  return _SlidingClouds(
+                    progress: _cloudController.value,
+                  );
+                },
+              ),
+            ),
           ),
         ),
 
@@ -148,27 +163,25 @@ class _SlidingClouds extends StatelessWidget {
         // One repeating strip is original + mirrored copy
         final stripWidth = spriteWidth * 2;
 
-        // Ensure we have enough mirrored pairs to span across the screen without gaps
-        final pairCount = (constraints.maxWidth / stripWidth).ceil() + 2;
+        // Ensure we have enough mirrored pairs to span across the overscanned width without gaps
+        final pairCount = (constraints.maxWidth / stripWidth).ceil() + 4;
 
         // Scroll offset: move left by one full strip width over the cycle
         final offset = -progress * stripWidth;
 
-        return ClipRect(
-          child: OverflowBox(
-            maxWidth: double.infinity,
-            alignment: Alignment.centerLeft,
-            child: Transform.translate(
-              offset: Offset(offset, 0),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (int i = 0; i < pairCount; i++) ...[
-                    _cloudImage(spriteWidth, bandHeight, mirrored: false),
-                    _cloudImage(spriteWidth, bandHeight, mirrored: true),
-                  ],
+        return OverflowBox(
+          maxWidth: double.infinity,
+          alignment: Alignment.centerLeft,
+          child: Transform.translate(
+            offset: Offset(offset, 0),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (int i = 0; i < pairCount; i++) ...[
+                  _cloudImage(spriteWidth, bandHeight, mirrored: false),
+                  _cloudImage(spriteWidth, bandHeight, mirrored: true),
                 ],
-              ),
+              ],
             ),
           ),
         );

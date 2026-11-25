@@ -1,3 +1,4 @@
+import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import '../../state/game_controller.dart';
 import '../../models/habitat_model.dart';
@@ -21,6 +22,7 @@ class WorldHUD extends StatelessWidget {
   final Function(HabitatModel) onStartMoveHabitat;
   final Function(HabitatModel) onOpenHabitatInfo;
   final VoidCallback onDeselectHabitat;
+  final VoidCallback? onOpenIslands;
 
   const WorldHUD({
     super.key,
@@ -38,6 +40,7 @@ class WorldHUD extends StatelessWidget {
     required this.onStartMoveHabitat,
     required this.onOpenHabitatInfo,
     required this.onDeselectHabitat,
+    this.onOpenIslands,
   });
 
   String _fmt(int n) {
@@ -75,12 +78,12 @@ class WorldHUD extends StatelessWidget {
     // Shrink the top bar a little on short windows so the side badges keep room.
     final heightScale = (screenH / 620).clamp(0.72, 1.0);
     final xpBarH = isCompact
-        ? ((screenW < 400 ? 54.0 : 66.0) * heightScale).clamp(42.0, 66.0)
-        : (114.0 * scale * heightScale).clamp(64.0, 114.0);
+        ? ((screenW < 400 ? 44.0 : 52.0) * heightScale).clamp(38.0, 52.0)
+        : (78.0 * scale * heightScale).clamp(52.0, 78.0);
     final xpBarW = xpBarH * (866.0 / 288.0);
 
     final pillW = isCompact
-        ? ((screenW - 28 - 16) / 3).clamp(70.0, 140.0)
+        ? 112.0
         : (174.0 * scale).clamp(105.0, 174.0);
     final pillH = pillW * (56.0 / 174.0);
 
@@ -90,175 +93,100 @@ class WorldHUD extends StatelessWidget {
 
     // The Goals/Progress/Social stack must always fit between the top bar and
     // the bottom edge, no matter how short the window is.
-    final badgeTop = isCompact ? (xpBarH + pillH + 14) : 138.0;
+    final badgeTop = isCompact ? (xpBarH + 18) : 104.0;
     final availableBadgeH = screenH - badgeTop - 16;
-    final fitBadgeScale = ((availableBadgeH - 20) / (3 * 124)).clamp(0.40, 1.0);
+    final fitBadgeScale = ((availableBadgeH - 16) / (3 * 124)).clamp(0.38, 1.0);
     final preferredBadgeScale = isCompact
-        ? (screenW < 400 ? 0.65 : 0.72)
+        ? (screenW < 450 ? 0.54 : 0.58)
         : (isShort ? 0.75 : scale.clamp(0.80, 1.0));
     final badgeScale =
         preferredBadgeScale < fitBadgeScale ? preferredBadgeScale : fitBadgeScale;
 
-    final preferredBuildScale = isCompact ? 0.75 : (isShort ? 0.80 : 1.0);
-    final buildScale = (preferredBuildScale * heightScale).clamp(0.52, 1.0);
+    final preferredBuildScale = isCompact ? 0.64 : (isShort ? 0.80 : 1.0);
+    final buildScale = (preferredBuildScale * heightScale).clamp(0.48, 1.0);
 
     return Stack(
       children: [
         // ── TOP BAR (Level & XP Bar on left, Resources & Settings on right) ──
         Positioned(
-          top: 14,
+          top: isCompact ? 10 : 14,
           left: 14,
           right: 14,
-          child: isCompact
-              ? Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Row 1: XP / Level Bar + Username + Settings
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // ── 1. LEVEL & XP BAR + USERNAME BESIDE LEVEL ──
+              Flexible(
+                flex: isCompact ? 5 : 0,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      _buildXpBarWidget(xpBarW, xpBarH, xpPercent),
+                      if (game.hasUsername && (!isCompact || screenW >= 540)) ...[
+                        SizedBox(width: isCompact ? 8 : 10),
+                        _buildUsernamePlaqueWidget(isCompact: isCompact),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              SizedBox(width: isCompact ? 8 : 12),
+
+              // ── 2. Top-Right Resources + Settings Row ──
+              Expanded(
+                flex: isCompact ? 6 : 1,
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
+                    child: Row(
+                      key: walkthroughKeys?[WalkthroughTargets.hudResources],
+                      mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        Expanded(
-                          child: Align(
-                            alignment: Alignment.centerLeft,
-                            child: FittedBox(
-                              fit: BoxFit.scaleDown,
-                              alignment: Alignment.centerLeft,
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: [
-                                  _buildXpBarWidget(xpBarW, xpBarH, xpPercent),
-                                  if (screenW >= 460 && game.hasUsername) ...[
-                                    const SizedBox(width: 8),
-                                    _buildUsernamePlaqueWidget(isCompact: true),
-                                  ],
-                                ],
-                              ),
-                            ),
-                          ),
+                        _buildWoodResourcePill(
+                          iconAsset: 'assets/ui/diamonds.png',
+                          value: '${game.crystals}',
+                          label: 'Star Crystals',
+                          onPlus: onOpenBuild,
+                          pillW: pillW,
+                          pillH: pillH,
                         ),
-                        const SizedBox(width: 8),
+                        SizedBox(width: isCompact ? 6 : 10),
+                        _buildWoodResourcePill(
+                          iconAsset: 'assets/ui/coins.png',
+                          value: _fmt(game.coins),
+                          label: 'Paw Coins',
+                          onPlus: onOpenBuild,
+                          pillW: pillW,
+                          pillH: pillH,
+                        ),
+                        SizedBox(width: isCompact ? 6 : 10),
+                        _buildWoodResourcePill(
+                          iconAsset: 'assets/ui/dogfood.png',
+                          value: _fmt(game.kibble),
+                          label: 'Kibble',
+                          onPlus: onOpenBuild,
+                          pillW: pillW,
+                          pillH: pillH,
+                        ),
+                        SizedBox(width: isCompact ? 6 : 10),
                         HoverSettingsButton(
                           onTap: onOpenSettings,
                           size: settingsSize,
                         ),
                       ],
                     ),
-                    const SizedBox(height: 6),
-                    // Row 2: Resources
-                    Row(
-                      key: walkthroughKeys?[WalkthroughTargets.hudResources],
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        Flexible(
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            alignment: Alignment.centerRight,
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                _buildWoodResourcePill(
-                                  iconAsset: 'assets/ui/diamonds.png',
-                                  value: '${game.crystals}',
-                                  label: 'Star Crystals',
-                                  onPlus: onOpenBuild,
-                                  pillW: pillW,
-                                  pillH: pillH,
-                                ),
-                                const SizedBox(width: 8),
-                                _buildWoodResourcePill(
-                                  iconAsset: 'assets/ui/coins.png',
-                                  value: _fmt(game.coins),
-                                  label: 'Paw Coins',
-                                  onPlus: onOpenBuild,
-                                  pillW: pillW,
-                                  pillH: pillH,
-                                ),
-                                const SizedBox(width: 8),
-                                _buildWoodResourcePill(
-                                  iconAsset: 'assets/ui/dogfood.png',
-                                  value: _fmt(game.kibble),
-                                  label: 'Kibble',
-                                  onPlus: onOpenBuild,
-                                  pillW: pillW,
-                                  pillH: pillH,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                )
-              : Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // ── 1. LEVEL & XP BAR + USERNAME BESIDE LEVEL ──
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        _buildXpBarWidget(xpBarW, xpBarH, xpPercent),
-                        if (game.hasUsername) ...[
-                          const SizedBox(width: 10),
-                          _buildUsernamePlaqueWidget(isCompact: false),
-                        ],
-                      ],
-                    ),
-                    const SizedBox(width: 12),
-
-                    // ── 2. Top-Right Resources Row ──
-                    Expanded(
-                      child: Align(
-                        alignment: Alignment.topRight,
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          alignment: Alignment.topRight,
-                          child: Row(
-                            key: walkthroughKeys?[WalkthroughTargets.hudResources],
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              _buildWoodResourcePill(
-                                iconAsset: 'assets/ui/diamonds.png',
-                                value: '${game.crystals}',
-                                label: 'Star Crystals',
-                                onPlus: onOpenBuild,
-                                pillW: pillW,
-                                pillH: pillH,
-                              ),
-                              const SizedBox(width: 10),
-                              _buildWoodResourcePill(
-                                iconAsset: 'assets/ui/coins.png',
-                                value: _fmt(game.coins),
-                                label: 'Paw Coins',
-                                onPlus: onOpenBuild,
-                                pillW: pillW,
-                                pillH: pillH,
-                              ),
-                              const SizedBox(width: 10),
-                              _buildWoodResourcePill(
-                                iconAsset: 'assets/ui/dogfood.png',
-                                value: _fmt(game.kibble),
-                                label: 'Kibble',
-                                onPlus: onOpenBuild,
-                                pillW: pillW,
-                                pillH: pillH,
-                              ),
-                              const SizedBox(width: 10),
-                              HoverSettingsButton(
-                                onTap: onOpenSettings,
-                                size: settingsSize,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
+              ),
+            ],
+          ),
         ),
 
         // ── LEFT COLUMN BADGES (GOALS, PROGRESS, SOCIAL) Enlarged with Hover ──
@@ -271,7 +199,7 @@ class WorldHUD extends StatelessWidget {
                 asset: 'assets/ui/GoalsIcon.png',
                 label: 'GOALS',
                 textLeftPercent: 0.52,
-                textTopPercent: 0.256,
+                textTopPercent: 0.275,
                 textWidthPercent: 0.66,
                 fontSize: 15.0,
                 tooltip: 'Open Daily Goals & Quests',
@@ -279,7 +207,7 @@ class WorldHUD extends StatelessWidget {
                 badgeW: 118.0 * badgeScale,
                 badgeH: 124.0 * badgeScale,
               ),
-              const SizedBox(height: 10),
+              SizedBox(height: isCompact ? 6 : 10),
 
               _buildBadgeButton(
                 asset: 'assets/ui/ProressIcon.png',
@@ -293,13 +221,13 @@ class WorldHUD extends StatelessWidget {
                 badgeW: 118.0 * badgeScale,
                 badgeH: 124.0 * badgeScale,
               ),
-              const SizedBox(height: 10),
+              SizedBox(height: isCompact ? 6 : 10),
 
               _buildBadgeButton(
                 asset: 'assets/ui/SocialIcon.png',
                 label: 'SOCIAL',
                 textLeftPercent: 0.50,
-                textTopPercent: 0.655,
+                textTopPercent: 0.630,
                 textWidthPercent: 0.70,
                 fontSize: 15.0,
                 tooltip: 'Friends & Social Island Visits',
@@ -326,6 +254,20 @@ class WorldHUD extends StatelessWidget {
               child: Stack(
                 alignment: Alignment.center,
                 children: [
+                  Transform.translate(
+                    offset: const Offset(0, 5),
+                    child: ImageFiltered(
+                      imageFilter: ImageFilter.blur(sigmaX: 4.5, sigmaY: 4.5),
+                      child: Image.asset(
+                        'assets/ui/shop.png',
+                        width: 152.0 * buildScale,
+                        height: 174.0 * buildScale,
+                        fit: BoxFit.contain,
+                        color: const Color(0x66000000),
+                        colorBlendMode: BlendMode.srcIn,
+                      ),
+                    ),
+                  ),
                   Image.asset(
                     'assets/ui/shop.png',
                     width: 152.0 * buildScale,
@@ -365,6 +307,26 @@ class WorldHUD extends StatelessWidget {
           ),
         ),
 
+        // ── BOTTOM-LEFT ISLANDS BADGE BUTTON (IslandIcon.png) ──
+        if (onOpenIslands != null &&
+            (selectedHab == null || selectedHab.underConstruction))
+          Positioned(
+            bottom: 16,
+            left: 14,
+            child: _buildBadgeButton(
+              asset: 'assets/ui/IslandIcon.png',
+              label: 'ISLANDS',
+              textLeftPercent: 0.49,
+              textTopPercent: 0.535,
+              textWidthPercent: 0.56,
+              fontSize: 15.0,
+              tooltip: 'Explore World Islands (${game.currentIsland.name})',
+              onTap: onOpenIslands!,
+              badgeW: 118.0 * badgeScale,
+              badgeH: 124.0 * badgeScale,
+            ),
+          ),
+
         // ── HABITAT ACTION CONTROLS BAR (When a completed habitat is tapped) ──
         if (selectedHab != null && !selectedHab.underConstruction)
           Positioned(
@@ -397,6 +359,20 @@ class WorldHUD extends StatelessWidget {
         child: Stack(
           clipBehavior: Clip.none,
           children: [
+            Positioned.fill(
+              child: Transform.translate(
+                offset: const Offset(0, 4),
+                child: ImageFiltered(
+                  imageFilter: ImageFilter.blur(sigmaX: 4, sigmaY: 4),
+                  child: Image.asset(
+                    'assets/ui/progress-bar.webp',
+                    fit: BoxFit.fill,
+                    color: const Color(0x66000000),
+                    colorBlendMode: BlendMode.srcIn,
+                  ),
+                ),
+              ),
+            ),
             Positioned.fill(
               child: Image.asset(
                 'assets/ui/progress-bar.webp',
@@ -552,19 +528,20 @@ class WorldHUD extends StatelessWidget {
       tooltip: 'Keeper Profile (${game.playerUsername})',
       child: Container(
         padding: EdgeInsets.symmetric(
-            horizontal: isCompact ? 10 : 14, vertical: isCompact ? 5 : 8),
+          horizontal: isCompact ? 10 : 12,
+          vertical: isCompact ? 5 : 6,
+        ),
         decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFF4B1E06), Color(0xFF260D02)],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
+          color: const Color(0xD92A1205),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: const Color(0x99FBBF24),
+            width: 1.4,
           ),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFFBBF24), width: 1.8),
           boxShadow: const [
             BoxShadow(
-              color: Color(0xAA000000),
-              blurRadius: 6,
+              color: Color(0x66000000),
+              blurRadius: 8,
               offset: Offset(0, 3),
             ),
           ],
@@ -572,55 +549,38 @@ class WorldHUD extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: isCompact ? 20 : 26,
-              height: isCompact ? 20 : 26,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: const LinearGradient(
-                  colors: [Color(0xFFFDE047), Color(0xFFD97706)],
-                ),
-                border: Border.all(
-                    color: const Color(0xFFFFFBEB),
-                    width: isCompact ? 1.0 : 1.4),
-              ),
-              child: Icon(Icons.pets_rounded,
-                  color: const Color(0xFF3B1404), size: isCompact ? 12 : 15),
+            Icon(
+              Icons.pets_rounded,
+              color: const Color(0xFFFDE047),
+              size: isCompact ? 14 : 16,
             ),
             const SizedBox(width: 6),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'KEEPER',
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: isCompact ? 96 : 136,
+              ),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  game.playerUsername,
+                  maxLines: 1,
                   style: TextStyle(
-                    color: const Color(0xFFFCD34D),
-                    fontFamily: 'Lilita One',
-                    fontSize: isCompact ? 8.0 : 9.5,
-                    letterSpacing: 0.8,
-                    height: 1.0,
+                    color: Colors.white,
+                    fontFamily: 'Fredoka',
+                    fontWeight: FontWeight.w700,
+                    fontSize: isCompact ? 12.5 : 14.0,
+                    height: 1.1,
+                    shadows: const [
+                      Shadow(
+                        color: Color(0x88000000),
+                        offset: Offset(0, 1),
+                        blurRadius: 2,
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 2),
-                ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxWidth: isCompact ? 78 : 110,
-                  ),
-                  child: Text(
-                    game.playerUsername,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontFamily: 'Fredoka',
-                      fontWeight: FontWeight.bold,
-                      fontSize: isCompact ? 11.0 : 13.0,
-                      height: 1.0,
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ),
           ],
         ),
@@ -636,6 +596,9 @@ class WorldHUD extends StatelessWidget {
     double pillH = 56.0,
     double pillW = 174.0,
   }) {
+    final double iconSize = (pillH * 0.52).clamp(16.0, 28.0);
+    final double plusSize = (pillH * 0.46).clamp(16.0, 24.0);
+    final double fontSize = (pillH * 0.34).clamp(12.5, 18.0);
 
     return HoverScale(
       scale: 1.05,
@@ -645,8 +608,29 @@ class WorldHUD extends StatelessWidget {
         width: pillW,
         height: pillH,
         child: Stack(
+          clipBehavior: Clip.none,
           alignment: Alignment.center,
           children: [
+            // Soft floating drop shadow behind the wooden plank
+            Positioned(
+              left: pillW * 0.04,
+              right: pillW * 0.04,
+              top: pillH * 0.14,
+              bottom: pillH * 0.06,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(pillH * 0.45),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x66000000),
+                      blurRadius: 8,
+                      offset: Offset(0, 4),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
             // Handcrafted wooden plank frame
             Positioned.fill(
               child: Image.asset(
@@ -658,10 +642,10 @@ class WorldHUD extends StatelessWidget {
 
             // 1. Resource Icon (Diamond, Gold Coins, Kibble)
             Positioned(
-              left: pillW * 0.19 - 14,
-              top: pillH * 0.50 - 14,
-              width: 28,
-              height: 28,
+              left: pillW * 0.18 - iconSize / 2,
+              top: (pillH - iconSize) / 2,
+              width: iconSize,
+              height: iconSize,
               child: Image.asset(
                 iconAsset,
                 fit: BoxFit.contain,
@@ -676,29 +660,31 @@ class WorldHUD extends StatelessWidget {
               top: 0,
               bottom: 0,
               child: Center(
-                child: Text(
-                  value,
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 18.0,
-                    fontFamily: 'Lilita One',
-                    letterSpacing: 0.5,
-                    shadows: [
-                      Shadow(
-                        color: Color(0xFF3B1404),
-                        offset: Offset(0, 1.5),
-                        blurRadius: 1,
-                      ),
-                      Shadow(
-                        color: Colors.black,
-                        offset: Offset(0, 2),
-                        blurRadius: 4,
-                      ),
-                    ],
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    value,
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                      fontSize: fontSize,
+                      fontFamily: 'Lilita One',
+                      letterSpacing: 0.5,
+                      shadows: const [
+                        Shadow(
+                          color: Color(0xFF3B1404),
+                          offset: Offset(0, 1.5),
+                          blurRadius: 1,
+                        ),
+                        Shadow(
+                          color: Colors.black,
+                          offset: Offset(0, 2),
+                          blurRadius: 4,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -706,17 +692,17 @@ class WorldHUD extends StatelessWidget {
 
             // 3. Tactile Green (+) Round Button
             Positioned(
-              left: pillW * 0.82 - 12,
-              top: pillH * 0.50 - 12,
-              width: 24,
-              height: 24,
+              left: pillW * 0.82 - plusSize / 2,
+              top: (pillH - plusSize) / 2,
+              width: plusSize,
+              height: plusSize,
               child: HoverScale(
                 scale: 1.15,
                 onTap: onPlus,
                 tooltip: 'Add $label',
                 child: Container(
-                  width: 24,
-                  height: 24,
+                  width: plusSize,
+                  height: plusSize,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     gradient: const LinearGradient(
@@ -734,14 +720,10 @@ class WorldHUD extends StatelessWidget {
                     ],
                   ),
                   alignment: Alignment.center,
-                  child: const Text(
-                    '+',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 14.5,
-                      height: 1.0,
-                    ),
+                  child: Icon(
+                    Icons.add_rounded,
+                    color: Colors.white,
+                    size: plusSize * 0.72,
                   ),
                 ),
               ),
@@ -774,8 +756,23 @@ class WorldHUD extends StatelessWidget {
         width: badgeW,
         height: badgeH,
         child: Stack(
+          clipBehavior: Clip.none,
           alignment: Alignment.center,
           children: [
+            Transform.translate(
+              offset: const Offset(0, 4),
+              child: ImageFiltered(
+                imageFilter: ImageFilter.blur(sigmaX: 4, sigmaY: 4),
+                child: Image.asset(
+                  asset,
+                  width: badgeW,
+                  height: badgeH,
+                  fit: BoxFit.contain,
+                  color: const Color(0x66000000),
+                  colorBlendMode: BlendMode.srcIn,
+                ),
+              ),
+            ),
             Image.asset(
               asset,
               width: badgeW,
@@ -1451,8 +1448,23 @@ class _HoverSettingsButtonState extends State<HoverSettingsButton> {
             width: widget.size,
             height: widget.size,
             child: Stack(
+              clipBehavior: Clip.none,
               alignment: Alignment.center,
               children: [
+                Container(
+                  width: widget.size * 0.86,
+                  height: widget.size * 0.86,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Color(0x66000000),
+                        blurRadius: 8,
+                        offset: Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                ),
                 Image.asset(
                   'assets/ui/SettingPlaceHolder.webp',
                   width: widget.size,

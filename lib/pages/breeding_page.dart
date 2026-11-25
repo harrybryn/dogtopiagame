@@ -34,7 +34,50 @@ class _BreedingPageState extends State<BreedingPage> {
     if (widget.game.coins < 500) {
       SoundManager.instance.playSadWhimper();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('You need 500 Paw Coins to breed!')),
+        SnackBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          padding: EdgeInsets.zero,
+          content: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFFB91C1C), Color(0xFF7F1D1D)],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFFFCA5A5), width: 1.8),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x88000000),
+                  blurRadius: 12,
+                  offset: Offset(0, 4),
+                ),
+              ],
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.warning_amber_rounded,
+                    color: Color(0xFFFEF08A), size: 20),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'You need 500 Paw Coins to breed!',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontFamily: 'Fredoka',
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13.5,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       );
       return;
     }

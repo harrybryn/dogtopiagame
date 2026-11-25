@@ -75,7 +75,13 @@ class DogtopiaRoot extends StatefulWidget {
 class _DogtopiaRootState extends State<DogtopiaRoot>
     with WidgetsBindingObserver {
   final GameController _game = GameController();
-  final MockFriend _mockFriend = MockFriend.sample();
+  final Map<String, MockFriend> _mockFriendsById = {
+    for (final f in MockFriend.allFriends()) f.id: f,
+  };
+  MockFriend _resolveMockFriend(MockFriend? arg) {
+    if (arg == null) return _mockFriendsById.values.first;
+    return _mockFriendsById.putIfAbsent(arg.id, () => arg);
+  }
   final ValueNotifier<Rect?> _walkthroughWorldTargetRect = ValueNotifier<Rect?>(
     null,
   );
@@ -246,21 +252,30 @@ class _DogtopiaRootState extends State<DogtopiaRoot>
 
             case 'friend_visit':
               final friend =
-                  _routeArgs['friend'] as MockFriend? ?? _mockFriend;
+                  _resolveMockFriend(_routeArgs['friend'] as MockFriend?);
+              final initialIslandId = _routeArgs['islandId'] as String?;
+              final showOverview =
+                  _routeArgs['showOverview'] as bool? ?? false;
               activePage = FriendVisitPage(
                 game: _game,
                 friend: friend,
+                initialIslandId: initialIslandId,
+                initialShowOverview: showOverview,
                 onBackToWorld: () => _navigateTo('world'),
                 onOpenHabitat: (habitat) => _navigateTo(
                   'friend_habitat',
-                  args: {'habitat': habitat, 'friend': friend},
+                  args: {
+                    'habitat': habitat,
+                    'friend': friend,
+                    'islandId': habitat.islandId,
+                  },
                 ),
               );
               break;
 
             case 'friend_habitat':
               final friend =
-                  _routeArgs['friend'] as MockFriend? ?? _mockFriend;
+                  _resolveMockFriend(_routeArgs['friend'] as MockFriend?);
               final habitat = _routeArgs['habitat'] as HabitatModel? ??
                   friend.habitats.first;
               activePage = HabitatCarePage(
@@ -270,7 +285,7 @@ class _DogtopiaRootState extends State<DogtopiaRoot>
                 visitFriend: friend,
                 onBackToWorld: () => _navigateTo(
                   'friend_visit',
-                  args: {'friend': friend},
+                  args: {'friend': friend, 'islandId': habitat.islandId},
                 ),
               );
               break;

@@ -100,94 +100,128 @@ class _SettingsDialogState extends State<SettingsDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final sfxCard = _buildSettingCard(
+      title: 'Sound Effects (SFX)',
+      icon: Icons.volume_up_rounded,
+      isOn: widget.game.sfxEnabled,
+      onToggle: () {
+        widget.game.toggleSfx();
+        setState(() {});
+      },
+      hasSlider: true,
+      volume: widget.game.sfxVolume,
+      onVolumeChanged: (val) {
+        widget.game.setSfxVolume(val);
+        setState(() {});
+      },
+      onVolumeChangeEnd: (_) {
+        SoundManager.instance.playClick();
+      },
+      accentColor: const Color(0xFFD97706),
+    );
+
+    final bgmCard = _buildSettingCard(
+      title: 'Music BGM',
+      icon: Icons.music_note_rounded,
+      isOn: widget.game.bgmEnabled,
+      onToggle: () {
+        widget.game.toggleBgm();
+        setState(() {});
+      },
+      hasSlider: true,
+      volume: widget.game.bgmVolume,
+      onVolumeChanged: (val) {
+        widget.game.setBgmVolume(val);
+        setState(() {});
+      },
+      accentColor: const Color(0xFF059669),
+    );
+
+    final gridCard = _buildSettingCard(
+      title: 'Island Grid Lines',
+      icon: Icons.grid_on_rounded,
+      isOn: widget.game.gridVisible,
+      onToggle: () {
+        widget.game.toggleGrid();
+        setState(() {});
+      },
+      hasSlider: false,
+      volume: 0,
+      onVolumeChanged: (_) {},
+      accentColor: const Color(0xFFD97706),
+    );
+
+    final tutorialCard = _buildReplayTutorialCard();
+
+    final content = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                flex: 10,
+                child: _buildProfileSaveCard(),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 11,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    sfxCard,
+                    const SizedBox(height: 8),
+                    bgmCard,
+                    const SizedBox(height: 8),
+                    gridCard,
+                    const SizedBox(height: 8),
+                    tutorialCard,
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          // ── Version Footnote ──
+          const Text(
+            'Dogtopia Sanctuary · Version 1.0',
+            style: TextStyle(
+              color: Color(0xFF92400E),
+              fontFamily: 'Lilita One',
+              fontSize: 11,
+              letterSpacing: 0.8,
+            ),
+          ),
+        ],
+      ),
+    );
+
     return GenericModal(
       title: 'SETTINGS',
-      maxWidth: 580,
-      scrollable: true,
+      maxWidth: 760,
+      scrollable: false,
       onClose: () => Navigator.of(context).pop(),
-      child: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // ── 0. Player Profile & Local Save Card ──
-            _buildProfileSaveCard(),
-            const SizedBox(height: 8),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final needsScale =
+              constraints.maxWidth < 500 || constraints.maxHeight < 305;
 
-            // ── 1. Sound Effects (SFX) Card with Integrated Adjuster ──
-            _buildSettingCard(
-              title: 'Sound Effects (SFX)',
-              icon: Icons.volume_up_rounded,
-              isOn: widget.game.sfxEnabled,
-              onToggle: () {
-                widget.game.toggleSfx();
-                setState(() {});
-              },
-              hasSlider: true,
-              volume: widget.game.sfxVolume,
-              onVolumeChanged: (val) {
-                widget.game.setSfxVolume(val);
-                setState(() {});
-              },
-              onVolumeChangeEnd: (_) {
-                SoundManager.instance.playClick();
-              },
-              accentColor: const Color(0xFFD97706),
-            ),
-            const SizedBox(height: 8),
-
-            // ── 2. Music BGM Card with Integrated Adjuster ──
-            _buildSettingCard(
-              title: 'Music BGM',
-              icon: Icons.music_note_rounded,
-              isOn: widget.game.bgmEnabled,
-              onToggle: () {
-                widget.game.toggleBgm();
-                setState(() {});
-              },
-              hasSlider: true,
-              volume: widget.game.bgmVolume,
-              onVolumeChanged: (val) {
-                widget.game.setBgmVolume(val);
-                setState(() {});
-              },
-              accentColor: const Color(0xFF059669),
-            ),
-            const SizedBox(height: 8),
-
-            // ── 3. Island Grid Lines Card ──
-            _buildSettingCard(
-              title: 'Island Grid Lines',
-              icon: Icons.grid_on_rounded,
-              isOn: widget.game.gridVisible,
-              onToggle: () {
-                widget.game.toggleGrid();
-                setState(() {});
-              },
-              hasSlider: false,
-              volume: 0,
-              onVolumeChanged: (_) {},
-              accentColor: const Color(0xFFD97706),
-            ),
-            const SizedBox(height: 8),
-
-            // ── 4. Dog Wizard Tutorial Replay Card ──
-            _buildReplayTutorialCard(),
-            const SizedBox(height: 10),
-
-            // ── Version Footnote ──
-            const Text(
-              'Dogtopia Sanctuary · Version 1.0',
-              style: TextStyle(
-                color: Color(0xFF92400E),
-                fontFamily: 'Lilita One',
-                fontSize: 11,
-                letterSpacing: 0.8,
+          if (needsScale) {
+            return Center(
+              child: FittedBox(
+                fit: BoxFit.contain,
+                child: SizedBox(
+                  width: 520,
+                  child: content,
+                ),
               ),
-            ),
-          ],
-        ),
+            );
+          }
+
+          return Center(child: content);
+        },
       ),
     );
   }
@@ -263,8 +297,9 @@ class _SettingsDialogState extends State<SettingsDialog> {
     );
   }
 
-  Widget _buildProfileSaveCard() {
+  Widget _buildProfileSaveCard({bool compact = false}) {
     final name = widget.game.hasUsername ? widget.game.playerUsername : 'Guest';
+    final hPad = compact ? 10.0 : 14.0;
 
     return Container(
       decoration: BoxDecoration(
@@ -288,14 +323,14 @@ class _SettingsDialogState extends State<SettingsDialog> {
         children: [
           // ── Top Row: Keeper Avatar, Username, Edit & Save Now ──
           Padding(
-            padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+            padding: EdgeInsets.fromLTRB(hPad, 10, hPad, 10),
             child: LayoutBuilder(
               builder: (context, constraints) {
-                final compact = constraints.maxWidth < 360;
+                final stackActions = compact || constraints.maxWidth < 360;
 
                 final avatar = Container(
-                  width: 38,
-                  height: 38,
+                  width: compact ? 30 : 38,
+                  height: compact ? 30 : 38,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     gradient: const LinearGradient(
@@ -306,8 +341,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
                     border:
                         Border.all(color: const Color(0xFF78350F), width: 1.8),
                   ),
-                  child: const Icon(Icons.pets_rounded,
-                      color: Color(0xFF3B1404), size: 20),
+                  child: Icon(Icons.pets_rounded,
+                      color: const Color(0xFF3B1404), size: compact ? 16 : 20),
                 );
 
                 final identity = Column(
@@ -317,14 +352,17 @@ class _SettingsDialogState extends State<SettingsDialog> {
                     Row(
                       children: [
                         Flexible(
-                          child: Text(
-                            name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Color(0xFF3B1404),
-                              fontFamily: 'Lilita One',
-                              fontSize: 16,
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              name,
+                              maxLines: 1,
+                              style: const TextStyle(
+                                color: Color(0xFF3B1404),
+                                fontFamily: 'Lilita One',
+                                fontSize: 16,
+                              ),
                             ),
                           ),
                         ),
@@ -361,16 +399,19 @@ class _SettingsDialogState extends State<SettingsDialog> {
                           ),
                         ),
                         const SizedBox(width: 5),
-                        const Flexible(
-                          child: Text(
-                            'Auto-saved locally on this device',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: Color(0xFF047857),
-                              fontFamily: 'Fredoka',
-                              fontWeight: FontWeight.w700,
-                              fontSize: 11,
+                        const Expanded(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              'Auto-saved locally on this device',
+                              maxLines: 1,
+                              style: TextStyle(
+                                color: Color(0xFF047857),
+                                fontFamily: 'Fredoka',
+                                fontWeight: FontWeight.w700,
+                                fontSize: 11,
+                              ),
                             ),
                           ),
                         ),
@@ -384,20 +425,24 @@ class _SettingsDialogState extends State<SettingsDialog> {
                   onTap: _openEditUsernameDialog,
                   child: Container(
                     alignment: Alignment.center,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    padding: EdgeInsets.symmetric(
+                        horizontal: compact ? 6 : 10, vertical: 5),
                     decoration: BoxDecoration(
                       color: const Color(0x24B45309),
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(
                           color: const Color(0xFFD97706), width: 1.2),
                     ),
-                    child: const Text(
-                      'EDIT',
-                      style: TextStyle(
-                        color: Color(0xFF78350F),
-                        fontFamily: 'Lilita One',
-                        fontSize: 11,
+                    child: const FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        'EDIT',
+                        maxLines: 1,
+                        style: TextStyle(
+                          color: Color(0xFF78350F),
+                          fontFamily: 'Lilita One',
+                          fontSize: 11,
+                        ),
                       ),
                     ),
                   ),
@@ -408,8 +453,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
                   onTap: _handleManualSave,
                   child: Container(
                     alignment: Alignment.center,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
+                    padding: EdgeInsets.symmetric(
+                        horizontal: compact ? 6 : 11, vertical: 5),
                     decoration: BoxDecoration(
                       gradient: _justSaved
                           ? const LinearGradient(
@@ -421,19 +466,23 @@ class _SettingsDialogState extends State<SettingsDialog> {
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(color: Colors.white, width: 1.2),
                     ),
-                    child: Text(
-                      _justSaved ? 'SAVED!' : 'SAVE NOW',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontFamily: 'Lilita One',
-                        fontSize: 11,
-                        letterSpacing: 0.4,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        _justSaved ? 'SAVED!' : 'SAVE NOW',
+                        maxLines: 1,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontFamily: 'Lilita One',
+                          fontSize: 11,
+                          letterSpacing: 0.4,
+                        ),
                       ),
                     ),
                   ),
                 );
 
-                if (!compact) {
+                if (!stackActions) {
                   return Row(
                     children: [
                       avatar,
@@ -474,7 +523,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
           // ── Bottom Banner: Beautiful Connect with Google Cloud Save UI ──
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+            padding: EdgeInsets.fromLTRB(hPad, 10, hPad, 12),
             decoration: const BoxDecoration(
               gradient: LinearGradient(
                 colors: [Color(0xFF3E1805), Color(0xFF260D02)],
@@ -495,35 +544,43 @@ class _SettingsDialogState extends State<SettingsDialog> {
                         color: Color(0xFF67E8F9), size: 17),
                     const SizedBox(width: 6),
                     const Expanded(
-                      child: Text(
-                        'CLOUD ACCOUNT BACKUP',
-                        style: TextStyle(
-                          color: Color(0xFFFEF08A),
-                          fontFamily: 'Lilita One',
-                          fontSize: 12,
-                          letterSpacing: 0.7,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'CLOUD ACCOUNT BACKUP',
+                          maxLines: 1,
+                          style: TextStyle(
+                            color: Color(0xFFFEF08A),
+                            fontFamily: 'Lilita One',
+                            fontSize: 12,
+                            letterSpacing: 0.7,
+                          ),
                         ),
                       ),
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: const Color(0x33FBBF24),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                            color: const Color(0x99FBBF24), width: 1),
-                      ),
-                      child: const Text(
-                        'NOT CONNECTED',
-                        style: TextStyle(
-                          color: Color(0xFFFDE68A),
-                          fontFamily: 'Lilita One',
-                          fontSize: 9.5,
-                          letterSpacing: 0.4,
+                    if (!compact) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0x33FBBF24),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                              color: const Color(0x99FBBF24), width: 1),
+                        ),
+                        child: const Text(
+                          'NOT CONNECTED',
+                          style: TextStyle(
+                            color: Color(0xFFFDE68A),
+                            fontFamily: 'Lilita One',
+                            fontSize: 9.5,
+                            letterSpacing: 0.4,
+                          ),
                         ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
                 const SizedBox(height: 4),
@@ -543,8 +600,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
                   scale: 1.025,
                   onTap: _showGoogleConnectPreviewDialog,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 10),
+                    padding: EdgeInsets.symmetric(
+                        horizontal: compact ? 10 : 16, vertical: compact ? 8 : 10),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(14),
@@ -562,11 +619,11 @@ class _SettingsDialogState extends State<SettingsDialog> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         SizedBox(
-                          width: 20,
-                          height: 20,
+                          width: compact ? 16 : 20,
+                          height: compact ? 16 : 20,
                           child: CustomPaint(painter: _GoogleLogoPainter()),
                         ),
-                        const SizedBox(width: 11),
+                        SizedBox(width: compact ? 7 : 11),
                         const Flexible(
                           child: FittedBox(
                             fit: BoxFit.scaleDown,
@@ -583,24 +640,26 @@ class _SettingsDialogState extends State<SettingsDialog> {
                             ),
                           ),
                         ),
-                        const SizedBox(width: 10),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 7, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFDBEAFE),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Text(
-                            'CLOUD',
-                            style: TextStyle(
-                              color: Color(0xFF1D4ED8),
-                              fontFamily: 'Lilita One',
-                              fontSize: 9.5,
-                              letterSpacing: 0.5,
+                        if (!compact) ...[
+                          const SizedBox(width: 10),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFDBEAFE),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Text(
+                              'CLOUD',
+                              style: TextStyle(
+                                color: Color(0xFF1D4ED8),
+                                fontFamily: 'Lilita One',
+                                fontSize: 9.5,
+                                letterSpacing: 0.5,
+                              ),
                             ),
                           ),
-                        ),
+                        ],
                       ],
                     ),
                   ),
@@ -613,9 +672,9 @@ class _SettingsDialogState extends State<SettingsDialog> {
     );
   }
 
-  Widget _buildReplayTutorialCard() {
+  Widget _buildReplayTutorialCard({bool compact = false}) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      padding: EdgeInsets.symmetric(horizontal: compact ? 10 : 14, vertical: 8),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           colors: [Color(0xFFFFFFFF), Color(0xFFFFFBF2), Color(0xFFFAECD5)],
@@ -662,7 +721,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
               ),
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 6),
           HoverScale(
             scale: 1.06,
             onTap: () {
@@ -670,7 +729,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
               widget.game.restartWalkthrough();
             },
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+              padding: EdgeInsets.symmetric(
+                  horizontal: compact ? 10 : 14, vertical: 4),
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
                   colors: [Color(0xFF0F766E), Color(0xFF115E59)],
@@ -712,8 +772,10 @@ class _SettingsDialogState extends State<SettingsDialog> {
     required ValueChanged<double> onVolumeChanged,
     ValueChanged<double>? onVolumeChangeEnd,
     required Color accentColor,
+    bool compact = false,
   }) {
     final percent = (volume * 100).round();
+    final hPad = compact ? 10.0 : 14.0;
 
     return Container(
       decoration: BoxDecoration(
@@ -737,7 +799,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
         children: [
           // ── Header Row: Icon, Title, and ON/OFF Pill Button ──
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            padding: EdgeInsets.symmetric(horizontal: hPad, vertical: 8),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -763,13 +825,13 @@ class _SettingsDialogState extends State<SettingsDialog> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 6),
                 HoverScale(
                   scale: 1.06,
                   onTap: onToggle,
                   child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                    padding: EdgeInsets.symmetric(
+                        horizontal: compact ? 10 : 14, vertical: 4),
                     decoration: BoxDecoration(
                       gradient: isOn
                           ? const LinearGradient(
@@ -820,8 +882,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
                     color: const Color(0xFFE5C89E).withAlpha(120),
                   ),
                   Padding(
-                    padding:
-                        const EdgeInsets.only(left: 14, right: 12, top: 4, bottom: 8),
+                    padding: EdgeInsets.only(
+                        left: hPad, right: compact ? 8 : 12, top: 2, bottom: 6),
                     child: Row(
                       children: [
                         Icon(
@@ -832,29 +894,35 @@ class _SettingsDialogState extends State<SettingsDialog> {
                           color: const Color(0xFF92400E),
                         ),
                         Expanded(
-                          child: SliderTheme(
-                            data: SliderTheme.of(context).copyWith(
-                              activeTrackColor: accentColor,
-                              inactiveTrackColor: const Color(0xFFE5D5C5),
-                              thumbColor: const Color(0xFFFBBF24),
-                              overlayColor: accentColor.withAlpha(35),
-                              thumbShape: const RoundSliderThumbShape(
-                                enabledThumbRadius: 7,
-                                elevation: 2,
+                          child: SizedBox(
+                            height: 30,
+                            child: SliderTheme(
+                              data: SliderTheme.of(context).copyWith(
+                                activeTrackColor: accentColor,
+                                inactiveTrackColor: const Color(0xFFE5D5C5),
+                                thumbColor: const Color(0xFFFBBF24),
+                                overlayColor: accentColor.withAlpha(35),
+                                overlayShape: RoundSliderOverlayShape(
+                                  overlayRadius: compact ? 12 : 16,
+                                ),
+                                thumbShape: RoundSliderThumbShape(
+                                  enabledThumbRadius: compact ? 6 : 7,
+                                  elevation: 2,
+                                ),
+                                trackHeight: 4,
                               ),
-                              trackHeight: 4,
-                            ),
-                            child: Slider(
-                              value: volume,
-                              min: 0.0,
-                              max: 1.0,
-                              onChanged: onVolumeChanged,
-                              onChangeEnd: onVolumeChangeEnd,
+                              child: Slider(
+                                value: volume,
+                                min: 0.0,
+                                max: 1.0,
+                                onChanged: onVolumeChanged,
+                                onChangeEnd: onVolumeChangeEnd,
+                              ),
                             ),
                           ),
                         ),
                         Container(
-                          constraints: const BoxConstraints(minWidth: 40),
+                          constraints: BoxConstraints(minWidth: compact ? 28 : 40),
                           padding: const EdgeInsets.symmetric(
                               horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
