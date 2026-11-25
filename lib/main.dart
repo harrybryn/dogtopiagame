@@ -1,7 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'state/game_controller.dart';
 import 'services/audio_service.dart';
+import 'services/cloud_save_service.dart';
 import 'services/local_save_service.dart';
 import 'components/common/loading_screen.dart';
 import 'components/common/username_setup_overlay.dart';
@@ -19,6 +22,7 @@ import 'models/habitat_model.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await _enterLandscape();
+  await CloudSaveService.instance.init();
   runApp(const DogtopiaApp());
 }
 
@@ -100,6 +104,8 @@ class _DogtopiaRootState extends State<DogtopiaRoot>
   };
   bool _isLoading = true;
   bool _saveHydrated = false;
+  bool _pendingCloudSync = false;
+  StreamSubscription<AuthState>? _authSub;
   String _currentRoute = 'world';
   Map<String, dynamic> _routeArgs = {};
 
@@ -109,7 +115,22 @@ class _DogtopiaRootState extends State<DogtopiaRoot>
     WidgetsBinding.instance.addObserver(this);
     _game.addListener(_onGameStateChanged);
 
-    LocalSaveService.instance.loadInto(_game).then((_) {
+    _authSub = CloudSaveService.instance.onAuthStateChange.listen((data) {
+      if (data.event == AuthChangeEvent.signedIn ||
+          data.event == AuthChangeEvent.initialSession) {
+        if (_saveHydrated) {
+          CloudSaveService.instance.syncOnLogin(_game);
+        } else {
+          _pendingCloudSync = true;
+        }
+      }
+    });
+
+    LocalSaveService.instance.loadInto(_game).then((_) async {
+      if (CloudSaveService.instance.isSignedIn || _pendingCloudSync) {
+        _pendingCloudSync = false;
+        await CloudSaveService.instance.syncOnLogin(_game);
+      }
       if (mounted) {
         setState(() => _saveHydrated = true);
       }
@@ -125,6 +146,7 @@ class _DogtopiaRootState extends State<DogtopiaRoot>
   void _onGameStateChanged() {
     if (_saveHydrated && _game.hasUsername) {
       LocalSaveService.instance.scheduleAutoSave(_game);
+      CloudSaveService.instance.scheduleAutoSave(_game);
     }
   }
 
@@ -136,6 +158,7 @@ class _DogtopiaRootState extends State<DogtopiaRoot>
             state == AppLifecycleState.inactive ||
             state == AppLifecycleState.detached)) {
       LocalSaveService.instance.saveNow(_game);
+      CloudSaveService.instance.saveNow(_game);
     }
   }
 
@@ -151,11 +174,14 @@ class _DogtopiaRootState extends State<DogtopiaRoot>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _authSub?.cancel();
     _game.removeListener(_onGameStateChanged);
     if (_saveHydrated && _game.hasUsername) {
       LocalSaveService.instance.saveNow(_game);
+      CloudSaveService.instance.saveNow(_game);
     } else {
       LocalSaveService.instance.cancelPending();
+      CloudSaveService.instance.cancelPending();
     }
     _walkthroughWorldTargetRect.dispose();
     SoundManager.instance.dispose();
@@ -311,6 +337,7 @@ class _DogtopiaRootState extends State<DogtopiaRoot>
                   onConfirmUsername: (name) {
                     _game.setUsername(name);
                     LocalSaveService.instance.saveNow(_game);
+                    CloudSaveService.instance.saveNow(_game);
                     if (_game.walkthroughActive) {
                       SoundManager.instance.playWalkthroughPop();
                     }

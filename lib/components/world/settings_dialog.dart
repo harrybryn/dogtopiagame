@@ -1,7 +1,9 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import '../../config/supabase_config.dart';
 import '../../state/game_controller.dart';
 import '../../services/audio_service.dart';
+import '../../services/cloud_save_service.dart';
 import '../../services/local_save_service.dart';
 import '../common/generic_modal.dart';
 import '../common/hover_scale.dart';
@@ -17,9 +19,14 @@ class SettingsDialog extends StatefulWidget {
 
 class _SettingsDialogState extends State<SettingsDialog> {
   bool _justSaved = false;
+  bool _isCloudBusy = false;
+  String? _cloudStatusNote;
 
   Future<void> _handleManualSave() async {
     final ok = await LocalSaveService.instance.saveNow(widget.game);
+    if (CloudSaveService.instance.isSignedIn) {
+      await CloudSaveService.instance.saveNow(widget.game);
+    }
     if (ok && mounted) {
       SoundManager.instance.playClick();
       setState(() => _justSaved = true);
@@ -27,6 +34,102 @@ class _SettingsDialogState extends State<SettingsDialog> {
         if (mounted) setState(() => _justSaved = false);
       });
     }
+  }
+
+  Future<void> _handleGoogleConnect() => _startGoogleAuth(preferCloud: false);
+
+  Future<void> _handleGoogleLoginExisting() =>
+      _startGoogleAuth(preferCloud: true);
+
+  Future<void> _startGoogleAuth({required bool preferCloud}) async {
+    SoundManager.instance.playClick();
+    if (!SupabaseConfig.isConfigured || !CloudSaveService.instance.isAvailable) {
+      _showSupabaseSetupDialog();
+      return;
+    }
+    setState(() {
+      _isCloudBusy = true;
+      _cloudStatusNote = preferCloud
+          ? 'Opening Google account login...'
+          : 'Opening Google sign-in...';
+    });
+    final ok = await CloudSaveService.instance.signInWithGoogle(
+      preferCloud: preferCloud,
+    );
+    if (!mounted) return;
+    if (ok && CloudSaveService.instance.isSignedIn) {
+      final status = await CloudSaveService.instance.syncOnLogin(
+        widget.game,
+        preferCloud: preferCloud,
+      );
+      if (!mounted) return;
+      setState(() {
+        _isCloudBusy = false;
+        switch (status) {
+          case CloudSyncStatus.loadedFromCloud:
+            _cloudStatusNote = 'Signed in & restored cloud island!';
+            break;
+          case CloudSyncStatus.uploadedLocal:
+            _cloudStatusNote = 'Signed in & saved island to cloud!';
+            break;
+          case CloudSyncStatus.upToDate:
+            _cloudStatusNote = widget.game.hasUsername
+                ? 'Signed in & synced to cloud!'
+                : 'Signed in! Set a username to save to cloud.';
+            break;
+          default:
+            _cloudStatusNote =
+                CloudSaveService.instance.lastError ??
+                'Signed in, but sync failed. Check player_saves RLS/table.';
+        }
+      });
+    } else {
+      setState(() {
+        _isCloudBusy = false;
+        _cloudStatusNote = ok
+            ? 'Finish sign-in in the browser, then tap Sync.'
+            : 'Google sign-in was cancelled or failed.';
+      });
+    }
+  }
+
+  Future<void> _handleCloudSyncNow() async {
+    SoundManager.instance.playClick();
+    setState(() {
+      _isCloudBusy = true;
+      _cloudStatusNote = 'Syncing with Supabase...';
+    });
+    final status = await CloudSaveService.instance.syncOnLogin(widget.game);
+    if (!mounted) return;
+    setState(() {
+      _isCloudBusy = false;
+      switch (status) {
+        case CloudSyncStatus.uploadedLocal:
+          _cloudStatusNote = 'Uploaded island to cloud!';
+          break;
+        case CloudSyncStatus.loadedFromCloud:
+          _cloudStatusNote = 'Restored newer island from cloud!';
+          break;
+        case CloudSyncStatus.upToDate:
+          _cloudStatusNote = 'Cloud save is up to date!';
+          break;
+        default:
+          _cloudStatusNote =
+              CloudSaveService.instance.lastError ??
+              'Sync failed. Check connection/RLS.';
+      }
+    });
+  }
+
+  Future<void> _handleGoogleSignOut() async {
+    SoundManager.instance.playClick();
+    setState(() => _isCloudBusy = true);
+    await CloudSaveService.instance.signOut();
+    if (!mounted) return;
+    setState(() {
+      _isCloudBusy = false;
+      _cloudStatusNote = 'Signed out of Google.';
+    });
   }
 
   void _openEditUsernameDialog() {
@@ -81,6 +184,9 @@ class _SettingsDialogState extends State<SettingsDialog> {
               if (next.length >= 2 && next.length <= 16) {
                 widget.game.setUsername(next);
                 LocalSaveService.instance.saveNow(widget.game);
+                if (CloudSaveService.instance.isSignedIn) {
+                  CloudSaveService.instance.saveNow(widget.game);
+                }
                 if (mounted) setState(() {});
                 Navigator.pop(ctx);
               }
@@ -226,7 +332,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
     );
   }
 
-  void _showGoogleConnectPreviewDialog() {
+  void _showSupabaseSetupDialog() {
     SoundManager.instance.playClick();
     final name = widget.game.hasUsername ? widget.game.playerUsername : 'Keeper';
     showDialog(
@@ -262,7 +368,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
           ],
         ),
         content: Text(
-          'Your island "$name" (Level ${widget.game.level}) is currently auto-saved locally on this device.\n\nGoogle + Supabase Cloud Sync is ready to link once online saving is enabled!',
+          'Your island "$name" (Level ${widget.game.level}) is currently auto-saved locally.\n\nTo enable Google + Supabase sync, paste your Supabase Anon Key into lib/config/supabase_config.dart.',
           textAlign: TextAlign.center,
           style: const TextStyle(
             color: Color(0xFFFEF3C7),
@@ -565,15 +671,24 @@ class _SettingsDialogState extends State<SettingsDialog> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 2),
                         decoration: BoxDecoration(
-                          color: const Color(0x33FBBF24),
+                          color: CloudSaveService.instance.isSignedIn
+                              ? const Color(0x3310B981)
+                              : const Color(0x33FBBF24),
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(
-                              color: const Color(0x99FBBF24), width: 1),
+                              color: CloudSaveService.instance.isSignedIn
+                                  ? const Color(0x9910B981)
+                                  : const Color(0x99FBBF24),
+                              width: 1),
                         ),
-                        child: const Text(
-                          'NOT CONNECTED',
+                        child: Text(
+                          CloudSaveService.instance.isSignedIn
+                              ? 'CONNECTED'
+                              : 'NOT CONNECTED',
                           style: TextStyle(
-                            color: Color(0xFFFDE68A),
+                            color: CloudSaveService.instance.isSignedIn
+                                ? const Color(0xFF6EE7B7)
+                                : const Color(0xFFFDE68A),
                             fontFamily: 'Lilita One',
                             fontSize: 9.5,
                             letterSpacing: 0.4,
@@ -584,21 +699,94 @@ class _SettingsDialogState extends State<SettingsDialog> {
                   ],
                 ),
                 const SizedBox(height: 4),
-                const Text(
-                  'Link your Google account to save your island online and play across devices.',
-                  style: TextStyle(
+                Text(
+                  CloudSaveService.instance.isSignedIn
+                      ? 'Signed in as ${CloudSaveService.instance.userEmail ?? 'Google Account'}.'
+                      : 'Link your Google account to save your island online and play across devices.',
+                  style: const TextStyle(
                     color: Color(0xCCFEF3C7),
                     fontFamily: 'Fredoka',
                     fontWeight: FontWeight.w600,
                     fontSize: 11.5,
                   ),
                 ),
+                if (_cloudStatusNote != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    _cloudStatusNote!,
+                    style: const TextStyle(
+                      color: Color(0xFF67E8F9),
+                      fontFamily: 'Fredoka',
+                      fontWeight: FontWeight.w700,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 10),
 
-                // Tactile Elevated Google Sign-In Button
-                HoverScale(
-                  scale: 1.025,
-                  onTap: _showGoogleConnectPreviewDialog,
+                if (CloudSaveService.instance.isSignedIn)
+                  Row(
+                    children: [
+                      Expanded(
+                        child: HoverScale(
+                          scale: 1.03,
+                          onTap: _isCloudBusy ? null : _handleCloudSyncNow,
+                          child: Container(
+                            alignment: Alignment.center,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 9),
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFF10B981), Color(0xFF059669)],
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                              border:
+                                  Border.all(color: Colors.white, width: 1.2),
+                            ),
+                            child: Text(
+                              _isCloudBusy ? 'SYNCING...' : 'SYNC NOW',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontFamily: 'Lilita One',
+                                fontSize: 12,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      HoverScale(
+                        scale: 1.03,
+                        onTap: _isCloudBusy ? null : _handleGoogleSignOut,
+                        child: Container(
+                          alignment: Alignment.center,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 9),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF5C280B),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                                color: const Color(0xFFFBBF24), width: 1.2),
+                          ),
+                          child: const Text(
+                            'SIGN OUT',
+                            style: TextStyle(
+                              color: Color(0xFFFEF08A),
+                              fontFamily: 'Lilita One',
+                              fontSize: 12,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                else
+                  // Tactile Elevated Google Sign-In Button
+                  HoverScale(
+                    scale: 1.025,
+                    onTap: _isCloudBusy ? null : _handleGoogleConnect,
                   child: Container(
                     padding: EdgeInsets.symmetric(
                         horizontal: compact ? 10 : 16, vertical: compact ? 8 : 10),
@@ -664,6 +852,51 @@ class _SettingsDialogState extends State<SettingsDialog> {
                     ),
                   ),
                 ),
+                  const SizedBox(height: 8),
+                  HoverScale(
+                    scale: 1.02,
+                    onTap: _isCloudBusy ? null : _handleGoogleLoginExisting,
+                    child: Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: compact ? 8 : 12,
+                        vertical: compact ? 6 : 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0x33FBBF24),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: const Color(0x88FBBF24),
+                          width: 1.2,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.login_rounded,
+                            color: const Color(0xFFFEF08A),
+                            size: compact ? 14 : 16,
+                          ),
+                          const SizedBox(width: 6),
+                          const Flexible(
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                'Already have an account? Log in with Google',
+                                maxLines: 1,
+                                style: TextStyle(
+                                  color: Color(0xFFFEF08A),
+                                  fontFamily: 'Fredoka',
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
