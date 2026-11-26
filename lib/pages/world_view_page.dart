@@ -20,6 +20,7 @@ import '../components/world/settings_dialog.dart';
 import '../components/world/habitat_info_dialog.dart';
 import '../components/common/generic_modal.dart';
 import '../models/obstacle_model.dart';
+import 'breeding_page.dart';
 
 class WorldViewPage extends StatefulWidget {
   final GameController game;
@@ -52,6 +53,7 @@ class _WorldViewPageState extends State<WorldViewPage>
   double _startCamY = 0.0;
   double _startZoom = 1.0;
   bool _isDragging = false;
+  final ValueNotifier<int> _cameraNotifier = ValueNotifier<int>(0);
 
   AnimationController? _islandOverviewController;
   bool _isIslandOverview = false;
@@ -86,6 +88,7 @@ class _WorldViewPageState extends State<WorldViewPage>
 
   @override
   void dispose() {
+    _cameraNotifier.dispose();
     _islandOverviewController?.dispose();
     super.dispose();
   }
@@ -387,35 +390,28 @@ class _WorldViewPageState extends State<WorldViewPage>
                                           pointerSignal.scrollDelta.dy < 0
                                           ? 1.12
                                           : 0.89;
-                                      setState(() {
-                                        final minZoom = W < 600
-                                            ? 0.60
-                                            : (W < 900 ? 0.80 : 1.0);
-                                        _zoom = (_zoom * zoomDelta).clamp(
-                                          minZoom,
-                                          2.8,
-                                        );
-                                        final nextScaledW =
-                                            worldWidth * baseScale * _zoom;
-                                        final nextScaledH =
-                                            worldHeight * baseScale * _zoom;
-                                        final nextMaxX = max(
-                                          0.0,
-                                          (nextScaledW - W) / 2,
-                                        );
-                                        final nextMaxY = max(
-                                          0.0,
-                                          (nextScaledH - H) / 2,
-                                        );
-                                        _camX = _camX.clamp(
-                                          -nextMaxX,
-                                          nextMaxX,
-                                        );
-                                        _camY = _camY.clamp(
-                                          -nextMaxY,
-                                          nextMaxY,
-                                        );
-                                      });
+                                      final minZoom = W < 600
+                                          ? 0.60
+                                          : (W < 900 ? 0.80 : 1.0);
+                                      _zoom = (_zoom * zoomDelta).clamp(
+                                        minZoom,
+                                        2.8,
+                                      );
+                                      final nextScaledW =
+                                          worldWidth * baseScale * _zoom;
+                                      final nextScaledH =
+                                          worldHeight * baseScale * _zoom;
+                                      final nextMaxX = max(
+                                        0.0,
+                                        (nextScaledW - W) / 2,
+                                      );
+                                      final nextMaxY = max(
+                                        0.0,
+                                        (nextScaledH - H) / 2,
+                                      );
+                                      _camX = _camX.clamp(-nextMaxX, nextMaxX);
+                                      _camY = _camY.clamp(-nextMaxY, nextMaxY);
+                                      _cameraNotifier.value++;
                                     }
                                   },
                                   child: GestureDetector(
@@ -431,51 +427,44 @@ class _WorldViewPageState extends State<WorldViewPage>
                                     onScaleUpdate: isPlacing
                                         ? null
                                         : (details) {
-                                            setState(() {
-                                              // Multi-touch pinch zoom
-                                              if (details.scale != 1.0) {
-                                                _zoom =
-                                                    (_startZoom * details.scale)
-                                                        .clamp(
-                                                          W < 600
-                                                              ? 0.60
-                                                              : (W < 900
-                                                                    ? 0.80
-                                                                    : 1.0),
-                                                          2.8,
-                                                        );
-                                              }
-                                              // Mouse or finger pan
-                                              _camX +=
-                                                  details.focalPointDelta.dx;
-                                              _camY +=
-                                                  details.focalPointDelta.dy;
+                                            // Multi-touch pinch zoom
+                                            if (details.scale != 1.0) {
+                                              _zoom =
+                                                  (_startZoom * details.scale)
+                                                      .clamp(
+                                                        W < 600
+                                                            ? 0.60
+                                                            : (W < 900
+                                                                  ? 0.80
+                                                                  : 1.0),
+                                                        2.8,
+                                                      );
+                                            }
+                                            // Mouse or finger pan
+                                            _camX += details.focalPointDelta.dx;
+                                            _camY += details.focalPointDelta.dy;
 
-                                              final currScaledW =
-                                                  worldWidth *
-                                                  baseScale *
-                                                  _zoom;
-                                              final currScaledH =
-                                                  worldHeight *
-                                                  baseScale *
-                                                  _zoom;
-                                              final currMaxX = max(
-                                                0.0,
-                                                (currScaledW - W) / 2,
-                                              );
-                                              final currMaxY = max(
-                                                0.0,
-                                                (currScaledH - H) / 2,
-                                              );
-                                              _camX = _camX.clamp(
-                                                -currMaxX,
-                                                currMaxX,
-                                              );
-                                              _camY = _camY.clamp(
-                                                -currMaxY,
-                                                currMaxY,
-                                              );
-                                            });
+                                            final currScaledW =
+                                                worldWidth * baseScale * _zoom;
+                                            final currScaledH =
+                                                worldHeight * baseScale * _zoom;
+                                            final currMaxX = max(
+                                              0.0,
+                                              (currScaledW - W) / 2,
+                                            );
+                                            final currMaxY = max(
+                                              0.0,
+                                              (currScaledH - H) / 2,
+                                            );
+                                            _camX = _camX.clamp(
+                                              -currMaxX,
+                                              currMaxX,
+                                            );
+                                            _camY = _camY.clamp(
+                                              -currMaxY,
+                                              currMaxY,
+                                            );
+                                            _cameraNotifier.value++;
                                           },
                                     onScaleEnd: isPlacing
                                         ? null
@@ -488,14 +477,64 @@ class _WorldViewPageState extends State<WorldViewPage>
                                           : SystemMouseCursors.grab,
                                       child: Stack(
                                         children: [
-                                          // The movable Island Canvas
-                                          Positioned(
-                                            left: leftPos,
-                                            top: topPos,
-                                            width: scaledW,
-                                            height: scaledH,
-                                            child: FittedBox(
-                                              fit: BoxFit.fill,
+                                          // The movable Island Canvas (GPU-transformed without rebuilding)
+                                          ValueListenableBuilder<int>(
+                                            valueListenable: _cameraNotifier,
+                                            builder: (context, _, islandChild) {
+                                              final curTotalScale =
+                                                  baseScale * _zoom;
+                                              final curScaledW =
+                                                  worldWidth * curTotalScale;
+                                              final curScaledH =
+                                                  worldHeight * curTotalScale;
+                                              final curMaxX = max(
+                                                0.0,
+                                                (curScaledW - W) / 2,
+                                              );
+                                              final curMaxY = max(
+                                                0.0,
+                                                (curScaledH - H) / 2,
+                                              );
+                                              final clampedX = _camX.clamp(
+                                                -curMaxX,
+                                                curMaxX,
+                                              );
+                                              final clampedY = _camY.clamp(
+                                                -curMaxY,
+                                                curMaxY,
+                                              );
+                                              final curLeft =
+                                                  (W - curScaledW) / 2 +
+                                                  clampedX;
+                                              final curTop =
+                                                  (H - curScaledH) / 2 +
+                                                  clampedY;
+
+                                              return Positioned(
+                                                left: 0,
+                                                top: 0,
+                                                width: worldWidth,
+                                                height: worldHeight,
+                                                child: Transform(
+                                                  alignment: Alignment.topLeft,
+                                                  transform: Matrix4.identity()
+                                                    ..translateByDouble(
+                                                      curLeft,
+                                                      curTop,
+                                                      0.0,
+                                                      1.0,
+                                                    )
+                                                    ..scaleByDouble(
+                                                      curTotalScale,
+                                                      curTotalScale,
+                                                      1.0,
+                                                      1.0,
+                                                    ),
+                                                  child: islandChild,
+                                                ),
+                                              );
+                                            },
+                                            child: RepaintBoundary(
                                               child: SizedBox(
                                                 width: worldWidth,
                                                 height: worldHeight,
@@ -605,6 +644,9 @@ class _WorldViewPageState extends State<WorldViewPage>
                                                   isLot2Unlocked: widget
                                                       .game
                                                       .isLot2Unlocked,
+                                                  isIslandHydrated: widget
+                                                      .game
+                                                      .isIslandHydrated,
                                                   onSelectObstacle:
                                                       _handleSelectObstacle,
                                                   onStartClearingObstacle:
@@ -704,8 +746,13 @@ class _WorldViewPageState extends State<WorldViewPage>
                                             SettingsDialog(game: widget.game),
                                       );
                                     },
-                                    onOpenBreeding: () =>
-                                        widget.onNavigate('breeding'),
+                                    onOpenBreeding: () {
+                                      showDialog(
+                                        context: context,
+                                        builder: (_) =>
+                                            BreedingDialog(game: widget.game),
+                                      );
+                                    },
                                     onOpenCollection: () =>
                                         widget.onNavigate('collection'),
                                     onOpenIslands: _openIslandOverview,
@@ -714,6 +761,14 @@ class _WorldViewPageState extends State<WorldViewPage>
                                         widget.onNavigate(
                                           'factory',
                                           args: {'habitat': hab},
+                                        );
+                                      } else if (hab.habitatId
+                                          .toLowerCase()
+                                          .contains('breeding')) {
+                                        showDialog(
+                                          context: context,
+                                          builder: (_) =>
+                                              BreedingDialog(game: widget.game),
                                         );
                                       } else {
                                         widget.onNavigate(
@@ -1773,7 +1828,7 @@ class _WorldViewPageState extends State<WorldViewPage>
                           child: Text(
                             canAfford
                                 ? 'UNLOCK LOT $lotNumber (🪙 $formattedCost)'
-                                : 'NEED 🪙 $formattedCost (Have: ${widget.game.coins})',
+                                : 'NEED 🪙 $formattedCost (Have: ${GameController.formatCoins(widget.game.coins)})',
                             maxLines: 1,
                             style: const TextStyle(
                               fontFamily: 'Lilita One',

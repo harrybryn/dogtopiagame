@@ -2,6 +2,7 @@ import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import '../../state/game_controller.dart';
 import '../../models/habitat_model.dart';
+import '../../models/habitat_catalog.dart';
 import '../../models/dog_model.dart';
 import '../../models/dog_evolution.dart';
 import '../common/hover_scale.dart';
@@ -43,15 +44,7 @@ class WorldHUD extends StatelessWidget {
     this.onOpenIslands,
   });
 
-  String _fmt(int n) {
-    if (n >= 1000000) {
-      return '${(n / 1000000).toStringAsFixed(1)} M';
-    }
-    if (n >= 1000) {
-      return '${(n / 1000).toStringAsFixed(0)} K';
-    }
-    return n.toString();
-  }
+  String _fmt(int n) => GameController.formatCoins(n);
 
   String _fmtXp(int n) {
     if (n >= 1000000) {
@@ -734,7 +727,26 @@ class WorldHUD extends StatelessWidget {
     );
   }
 
-  Widget _buildBadgeButton({
+  static double computeBadgeScale(double screenW, double screenH) {
+    final isCompact = screenW < 700;
+    final isShort = screenH < 560;
+    final scale = (screenW / 1100).clamp(0.65, 1.0);
+    final heightScale = (screenH / 620).clamp(0.72, 1.0);
+    final xpBarH = isCompact
+        ? ((screenW < 400 ? 44.0 : 52.0) * heightScale).clamp(38.0, 52.0)
+        : (78.0 * scale * heightScale).clamp(52.0, 78.0);
+    final badgeTop = isCompact ? (xpBarH + 18) : 104.0;
+    final availableBadgeH = screenH - badgeTop - 16;
+    final fitBadgeScale = ((availableBadgeH - 16) / (3 * 124)).clamp(0.38, 1.0);
+    final preferredBadgeScale = isCompact
+        ? (screenW < 450 ? 0.54 : 0.58)
+        : (isShort ? 0.75 : scale.clamp(0.80, 1.0));
+    return preferredBadgeScale < fitBadgeScale
+        ? preferredBadgeScale
+        : fitBadgeScale;
+  }
+
+  static Widget buildBadgeButton({
     required String asset,
     required String label,
     required double textLeftPercent,
@@ -816,12 +828,32 @@ class WorldHUD extends StatelessWidget {
     );
   }
 
-  String _formatNumber(int n) {
-    return n.toString().replaceAllMapped(
-          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-          (Match m) => '${m[1]},',
-        );
-  }
+  Widget _buildBadgeButton({
+    required String asset,
+    required String label,
+    required double textLeftPercent,
+    required double textTopPercent,
+    required double textWidthPercent,
+    required double fontSize,
+    required String tooltip,
+    required VoidCallback onTap,
+    double badgeW = 118.0,
+    double badgeH = 124.0,
+  }) =>
+      WorldHUD.buildBadgeButton(
+        asset: asset,
+        label: label,
+        textLeftPercent: textLeftPercent,
+        textTopPercent: textTopPercent,
+        textWidthPercent: textWidthPercent,
+        fontSize: fontSize,
+        tooltip: tooltip,
+        onTap: onTap,
+        badgeW: badgeW,
+        badgeH: badgeH,
+      );
+
+  String _formatNumber(int n) => GameController.formatCoins(n);
 
   String _formatDuration(int totalSeconds) {
     if (totalSeconds <= 0) return '00:00';
@@ -836,10 +868,11 @@ class WorldHUD extends StatelessWidget {
 
   Widget _buildHabitatActionBar(BuildContext context, HabitatModel hab) {
     final isFactory = hab.isFactory;
-    final isBaking = hab.isBaking;
-    final isReadyToCollectFood = isFactory &&
-        hab.readyToCollectDogfood &&
-        (hab.dogfoodAccumulated > 0 || (hab.bakingFoodAmount ?? 0) > 0);
+    final isHabitat = hab.type == 'habitat';
+    final isWaterStation = hab.isWaterStation;
+    final isBreedingDen = hab.habitatId.toLowerCase().contains('breeding');
+    final showCollectCoins = isHabitat;
+    final catItem = HabitatCatalog.findById(hab.habitatId);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -871,7 +904,9 @@ class WorldHUD extends StatelessWidget {
               ],
             ),
             child: Text(
-              '${hab.name.toUpperCase()} LEVEL ${hab.level}',
+              isHabitat
+                  ? '${hab.name.toUpperCase()} LEVEL ${hab.level}'
+                  : hab.name.toUpperCase(),
               style: const TextStyle(
                 color: Color(0xFFFEF08A),
                 fontFamily: 'Lilita One',
@@ -911,7 +946,7 @@ class WorldHUD extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    // ── 1. Left Section: Resident Dogs or Factory Info ──
+                    // ── 1. Left Section: Resident Dogs (habitats), Factory Info, or Building/Decor Info ──
                     if (isFactory) ...[
                       HoverScale(
                         scale: 1.05,
@@ -969,7 +1004,7 @@ class WorldHUD extends StatelessWidget {
                           ],
                         ),
                       ),
-                    ] else ...[
+                    ] else if (isHabitat) ...[
                       if (hab.dogs.isNotEmpty) ...[
                         Row(
                           mainAxisSize: MainAxisSize.min,
@@ -1015,6 +1050,68 @@ class WorldHUD extends StatelessWidget {
                           ),
                         ),
                       ],
+                    ] else if (catItem != null) ...[
+                      HoverScale(
+                        scale: 1.05,
+                        onTap: () => onOpenHabitatInfo(hab),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 48,
+                              height: 48,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(14),
+                                color: const Color(0xFF290E02),
+                                border: Border.all(
+                                    color: const Color(0xFFFCD34D), width: 1.8),
+                              ),
+                              padding: const EdgeInsets.all(4),
+                              child: Image.asset(
+                                catItem.imageAsset,
+                                fit: BoxFit.contain,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  hab.type == 'decor'
+                                      ? 'ISLAND DECOR'
+                                      : (isWaterStation
+                                          ? (game.isHydrationRushActive
+                                              ? '2X RUSH (${game.hydrationRushRemainingSeconds}s)'
+                                              : (game.isIslandHydrated
+                                                  ? 'HYDRATED (+15%)'
+                                                  : 'DOGS THIRSTY! (-50%)'))
+                                          : 'FACILITY'),
+                                  style: TextStyle(
+                                    color: isWaterStation
+                                        ? (game.isHydrationRushActive
+                                              ? const Color(0xFF38BDF8)
+                                              : (game.isIslandHydrated
+                                                  ? const Color(0xFF6EE7B7)
+                                                  : const Color(0xFFFCA5A5)))
+                                        : const Color(0xFFFEF08A),
+                                    fontFamily: 'Lilita One',
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                Text(
+                                  catItem.tagline,
+                                  style: const TextStyle(
+                                    color: Color(0xFFFEF3C7),
+                                    fontFamily: 'Fredoka',
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
                     ],
 
                     // ── Vertical Divider ──
@@ -1029,7 +1126,8 @@ class WorldHUD extends StatelessWidget {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // MAKE FOOD (factory) or COLLECT (habitat) Button
+                        // MAKE FOOD (factory) or COLLECT (habitat / water station only)
+                        if (isFactory || showCollectCoins) ...[
                         HoverScale(
                           key: isFactory
                               ? (walkthroughKeys?[WalkthroughTargets.hudMakeFood])
@@ -1039,7 +1137,8 @@ class WorldHUD extends StatelessWidget {
                             if (isFactory) {
                               onOpenHabitatCare(hab);
                             } else {
-                              if (hab.coinsAccumulated > 0) {
+                              if ((hab.dogs.isNotEmpty || hab.isWaterStation) &&
+                                  hab.coinsAccumulated > 0) {
                                 game.collectCoins(hab.id);
                               }
                             }
@@ -1110,9 +1209,12 @@ class WorldHUD extends StatelessWidget {
                                           ],
                                         ),
                                         child: Text(
-                                          _formatNumber(hab.coinsAccumulated > 0
-                                              ? hab.coinsAccumulated
-                                              : 1000),
+                                          _formatNumber(
+                                            (hab.dogs.isEmpty &&
+                                                    !isWaterStation)
+                                                ? 0
+                                                : hab.coinsAccumulated,
+                                          ),
                                           style: const TextStyle(
                                             fontFamily: 'Lilita One',
                                             fontSize: 10,
@@ -1141,6 +1243,134 @@ class WorldHUD extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 12),
+                        ],
+
+                        // BREED Button (Breeding Den only)
+                        if (isBreedingDen) ...[
+                          HoverScale(
+                            scale: 1.08,
+                            onTap: onOpenBreeding,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 48,
+                                  height: 48,
+                                  decoration: BoxDecoration(
+                                    gradient: const LinearGradient(
+                                      begin: Alignment.topCenter,
+                                      end: Alignment.bottomCenter,
+                                      colors: [
+                                        Color(0xFFF472B6),
+                                        Color(0xFFDB2777),
+                                      ],
+                                    ),
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(
+                                      color: const Color(0xFFFBCFE8),
+                                      width: 1.5,
+                                    ),
+                                    boxShadow: const [
+                                      BoxShadow(
+                                        color: Color(0x66000000),
+                                        blurRadius: 6,
+                                        offset: Offset(0, 3),
+                                      ),
+                                    ],
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: const Icon(
+                                    Icons.favorite_rounded,
+                                    color: Colors.white,
+                                    size: 26,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                const Text(
+                                  'BREED',
+                                  style: TextStyle(
+                                    fontFamily: 'Lilita One',
+                                    fontSize: 10,
+                                    color: Color(0xFFF9A8D4),
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                        ],
+
+                        // HYDRATE Button (Water Station only)
+                        if (isWaterStation) ...[
+                          HoverScale(
+                            scale: game.canHydratePark ? 1.08 : 1.0,
+                            onTap: game.canHydratePark
+                                ? () => game.hydratePark()
+                                : null,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 48,
+                                  height: 48,
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      begin: Alignment.topCenter,
+                                      end: Alignment.bottomCenter,
+                                      colors: game.canHydratePark
+                                          ? const [
+                                              Color(0xFF38BDF8),
+                                              Color(0xFF0284C7),
+                                            ]
+                                          : const [
+                                              Color(0xFF64748B),
+                                              Color(0xFF475569),
+                                            ],
+                                    ),
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(
+                                      color: game.canHydratePark
+                                          ? const Color(0xFFBAE6FD)
+                                          : const Color(0xFF94A3B8),
+                                      width: 1.5,
+                                    ),
+                                    boxShadow: const [
+                                      BoxShadow(
+                                        color: Color(0x66000000),
+                                        blurRadius: 6,
+                                        offset: Offset(0, 3),
+                                      ),
+                                    ],
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: Icon(
+                                    Icons.water_drop_rounded,
+                                    color: game.canHydratePark
+                                        ? Colors.white
+                                        : const Color(0xFFCBD5E1),
+                                    size: 26,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  game.canHydratePark
+                                      ? 'HYDRATE'
+                                      : '${game.hydrationCooldownRemainingSeconds}s',
+                                  style: TextStyle(
+                                    fontFamily: 'Lilita One',
+                                    fontSize: 10,
+                                    color: game.canHydratePark
+                                        ? const Color(0xFF7DD3FC)
+                                        : const Color(0xFFCBD5E1),
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                        ],
 
                         // INFO Button
                         HoverScale(

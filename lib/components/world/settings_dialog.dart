@@ -206,56 +206,55 @@ class _SettingsDialogState extends State<SettingsDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final sfxCard = _buildSettingCard(
-      title: 'Sound Effects (SFX)',
-      icon: Icons.volume_up_rounded,
-      isOn: widget.game.sfxEnabled,
-      onToggle: () {
-        widget.game.toggleSfx();
-        setState(() {});
-      },
-      hasSlider: true,
-      volume: widget.game.sfxVolume,
-      onVolumeChanged: (val) {
-        widget.game.setSfxVolume(val);
-        setState(() {});
-      },
-      onVolumeChangeEnd: (_) {
-        SoundManager.instance.playClick();
-      },
-      accentColor: const Color(0xFFD97706),
-    );
+    return ListenableBuilder(
+      listenable: widget.game,
+      builder: (context, _) {
+        final sfxCard = _buildSettingCard(
+          title: 'Sound Effects (SFX)',
+          icon: Icons.volume_up_rounded,
+          isOn: widget.game.sfxEnabled,
+          enableToggleSounds: false,
+          onToggle: () {
+            widget.game.toggleSfx();
+          },
+          hasSlider: true,
+          volume: widget.game.sfxVolume,
+          onVolumeChanged: (val) {
+            widget.game.setSfxVolume(val);
+          },
+          onVolumeChangeEnd: (_) {
+            SoundManager.instance.playClick();
+          },
+          accentColor: const Color(0xFFD97706),
+        );
 
-    final bgmCard = _buildSettingCard(
-      title: 'Music BGM',
-      icon: Icons.music_note_rounded,
-      isOn: widget.game.bgmEnabled,
-      onToggle: () {
-        widget.game.toggleBgm();
-        setState(() {});
-      },
-      hasSlider: true,
-      volume: widget.game.bgmVolume,
-      onVolumeChanged: (val) {
-        widget.game.setBgmVolume(val);
-        setState(() {});
-      },
-      accentColor: const Color(0xFF059669),
-    );
+        final bgmCard = _buildSettingCard(
+          title: 'Music BGM',
+          icon: Icons.music_note_rounded,
+          isOn: widget.game.bgmEnabled,
+          onToggle: () {
+            widget.game.toggleBgm();
+          },
+          hasSlider: true,
+          volume: widget.game.bgmVolume,
+          onVolumeChanged: (val) {
+            widget.game.setBgmVolume(val);
+          },
+          accentColor: const Color(0xFF059669),
+        );
 
-    final gridCard = _buildSettingCard(
-      title: 'Island Grid Lines',
-      icon: Icons.grid_on_rounded,
-      isOn: widget.game.gridVisible,
-      onToggle: () {
-        widget.game.toggleGrid();
-        setState(() {});
-      },
-      hasSlider: false,
-      volume: 0,
-      onVolumeChanged: (_) {},
-      accentColor: const Color(0xFFD97706),
-    );
+        final gridCard = _buildSettingCard(
+          title: 'Island Grid Lines',
+          icon: Icons.grid_on_rounded,
+          isOn: widget.game.gridVisible,
+          onToggle: () {
+            widget.game.toggleGrid();
+          },
+          hasSlider: false,
+          volume: 0,
+          onVolumeChanged: (_) {},
+          accentColor: const Color(0xFFD97706),
+        );
 
     final tutorialCard = _buildReplayTutorialCard();
 
@@ -326,9 +325,19 @@ class _SettingsDialogState extends State<SettingsDialog> {
             );
           }
 
-          return Center(child: content);
+          return Center(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: SizedBox(
+                width: constraints.maxWidth,
+                child: content,
+              ),
+            ),
+          );
         },
       ),
+    );
+      },
     );
   }
 
@@ -1006,6 +1015,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
     ValueChanged<double>? onVolumeChangeEnd,
     required Color accentColor,
     bool compact = false,
+    bool enableToggleSounds = true,
   }) {
     final percent = (volume * 100).round();
     final hPad = compact ? 10.0 : 14.0;
@@ -1061,6 +1071,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
                 const SizedBox(width: 6),
                 HoverScale(
                   scale: 1.06,
+                  enableSounds: enableToggleSounds,
                   onTap: onToggle,
                   child: Container(
                     padding: EdgeInsets.symmetric(

@@ -69,7 +69,8 @@ class DogStageInfo {
     if (b.contains('beagle')) return 'Forest Beagle';
     if (b.contains('bulldog')) return 'English Bulldog';
     if (b.contains('chronos')) return 'Chronos Dog';
-    if (b.contains('german') || b.contains('shepherd')) return 'German Shepherd';
+    if (b.contains('german') || b.contains('shepherd'))
+      return 'German Shepherd';
     if (b.contains('golden')) return 'Golden Retriever';
     if (b.contains('husky')) return 'Arctic Husky';
     if (b.contains('labrador')) return 'Labrador Retriever';
@@ -118,8 +119,8 @@ class DogStageInfo {
     final evolutionLore = level == 4
         ? 'Incredible! Your companion transformed into a swift and spirited Young Pup! Strength and coin output increased!'
         : (level == 12
-            ? 'Magnificent! Your companion reached full maturity as a majestic Adult Dog! Maximum Element mastery unlocked!'
-            : '');
+              ? 'Magnificent! Your companion reached full maturity as a majestic Adult Dog! Maximum Element mastery unlocked!'
+              : '');
 
     return DogStageInfo(
       level: level,

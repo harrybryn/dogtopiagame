@@ -5,11 +5,14 @@ class TaskModel {
   final int rewardCoins;
   final int rewardXp;
   final int rewardCrystals;
+  int progress;
+  final int target;
   bool done;
 
   String get title => desc;
   int get coinReward => rewardCoins;
   int get xpReward => rewardXp;
+  bool get isCompleted => progress >= target;
 
   TaskModel({
     required this.id,
@@ -18,6 +21,8 @@ class TaskModel {
     this.rewardCoins = 0,
     this.rewardXp = 0,
     this.rewardCrystals = 0,
+    this.progress = 0,
+    this.target = 1,
     this.done = false,
   });
 
@@ -28,6 +33,8 @@ class TaskModel {
         'rewardCoins': rewardCoins,
         'rewardXp': rewardXp,
         'rewardCrystals': rewardCrystals,
+        'progress': progress,
+        'target': target,
         'done': done,
       };
 
@@ -38,6 +45,8 @@ class TaskModel {
         rewardCoins: json['rewardCoins'] as int? ?? 0,
         rewardXp: json['rewardXp'] as int? ?? 0,
         rewardCrystals: json['rewardCrystals'] as int? ?? 0,
+        progress: json['progress'] as int? ?? 0,
+        target: json['target'] as int? ?? 1,
         done: json['done'] as bool? ?? false,
       );
 
@@ -45,37 +54,42 @@ class TaskModel {
         TaskModel(
           id: 'task-1',
           type: 'Feed',
-          desc: 'Feed dogs basic kibble',
+          desc: 'Feed a dog kibble',
           rewardCoins: 350,
           rewardXp: 120,
+          target: 1,
         ),
         TaskModel(
           id: 'task-2',
-          type: 'Bath',
-          desc: 'Scrub dog at the oasis pond',
+          type: 'Collect',
+          desc: 'Collect coins from a habitat',
           rewardCoins: 500,
           rewardXp: 180,
+          target: 1,
         ),
         TaskModel(
           id: 'task-3',
-          type: 'Play',
-          desc: 'Throw a bone for Basenji',
+          type: 'Bake',
+          desc: 'Bake kibble in the Dogfood Factory',
           rewardCoins: 400,
           rewardXp: 150,
+          target: 1,
         ),
         TaskModel(
           id: 'task-4',
-          type: 'Refill',
-          desc: 'Refill stone water station',
+          type: 'Care',
+          desc: 'Pet or care for a dog',
           rewardCoins: 200,
           rewardXp: 80,
+          target: 1,
         ),
         TaskModel(
           id: 'task-5',
-          type: 'Groom',
-          desc: 'Brush Pharaoh Hound coat',
+          type: 'Build',
+          desc: 'Place a habitat or adopt a dog',
           rewardCrystals: 5,
           rewardXp: 250,
+          target: 1,
         ),
       ];
 }

@@ -60,7 +60,7 @@ void main() {
 
     final nameRect =
         tester.getRect(find.text(habitat.dogs.first.name.toUpperCase()));
-    for (final label in ['${game.crystals}', '5.0 K', '1.0 K']) {
+    for (final label in ['${game.crystals}', '5,000', '1,000']) {
       final pillRect = tester.getRect(find.text(label));
       expect(
         nameRect.top >= pillRect.bottom ||

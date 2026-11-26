@@ -70,6 +70,8 @@ class HabitatModel {
       name.toLowerCase().contains('factory') ||
       name.toLowerCase().contains('bakery');
 
+  bool get isWaterStation => habitatId == 'water-station';
+
   bool get isBaking =>
       isFactory && bakingEndsAt != null && !isBakingFinished;
 

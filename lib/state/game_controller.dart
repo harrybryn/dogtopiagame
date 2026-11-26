@@ -71,14 +71,36 @@ class GameController extends ChangeNotifier {
   // Claimed every-5-levels milestone rewards (e.g. {5, 10, 15})
   Set<int> _claimedLevelMilestones = {};
 
+  // Water Station Hydration (10m hydrated + 60s 2x rush, 120s cooldown)
+  int _lastHydrateAt = 0;
+  int _hydrationRushEndsAt = 0;
+  int _hydratedUntil = 0;
+
   GameController({bool startWalkthrough = true}) {
     _walkthroughActive = startWalkthrough;
     _walkthroughCompleted = !startWalkthrough;
-    SoundManager.instance.setBgmEnabled(_bgmEnabled);
-    SoundManager.instance.setSfxEnabled(_sfxEnabled);
-    SoundManager.instance.setBgmVolume(_bgmVolume);
-    SoundManager.instance.setSfxVolume(_sfxVolume);
+    if (SoundManager.instance.hasSavedAudioPrefs) {
+      _bgmEnabled = SoundManager.instance.bgmEnabled;
+      _bgmVolume = SoundManager.instance.bgmVolume;
+      _sfxEnabled = SoundManager.instance.sfxEnabled;
+      _sfxVolume = SoundManager.instance.sfxVolume;
+    } else {
+      SoundManager.instance.setBgmVolume(_bgmVolume, persist: false);
+      SoundManager.instance.setSfxVolume(_sfxVolume, persist: false);
+      SoundManager.instance.setBgmEnabled(_bgmEnabled, persist: false);
+      SoundManager.instance.setSfxEnabled(_sfxEnabled, persist: false);
+    }
     _startIncomeTimer();
+  }
+
+  /// Syncs locally persisted audio preferences from [SoundManager] into state.
+  void syncAudioFromSoundManager() {
+    if (!SoundManager.instance.hasSavedAudioPrefs) return;
+    _bgmEnabled = SoundManager.instance.bgmEnabled;
+    _bgmVolume = SoundManager.instance.bgmVolume;
+    _sfxEnabled = SoundManager.instance.sfxEnabled;
+    _sfxVolume = SoundManager.instance.sfxVolume;
+    notifyListeners();
   }
 
   // Getters
@@ -112,7 +134,7 @@ class GameController extends ChangeNotifier {
       _placedHabitats.where((h) => h.islandId == _currentIslandId).toList();
   List<ObstacleModel> obstaclesForIsland(String islandId) =>
       _obstaclesByIsland.putIfAbsent(
-          islandId, () => ObstacleModel.defaultObstacles());
+          islandId, () => ObstacleModel.defaultObstaclesForIsland(islandId));
   List<ObstacleModel> get currentIslandObstacles =>
       obstaclesForIsland(_currentIslandId);
   List<ObstacleModel> get obstacles => obstaclesForIsland(_currentIslandId);
@@ -199,6 +221,9 @@ class GameController extends ChangeNotifier {
       'walkthroughCompleted': _walkthroughCompleted,
       'walkthroughRewardClaimed': _walkthroughRewardClaimed,
       'claimedLevelMilestones': _claimedLevelMilestones.toList()..sort(),
+      'lastHydrateAt': _lastHydrateAt,
+      'hydrationRushEndsAt': _hydrationRushEndsAt,
+      'hydratedUntil': _hydratedUntil,
       'placedHabitats': _placedHabitats.map((h) => h.toJson()).toList(),
       'obstacles': obstaclesForIsland(IslandCatalog.starterIslandId)
           .map((o) => o.toJson())
@@ -221,6 +246,9 @@ class GameController extends ChangeNotifier {
     _maxXp = json['maxXp'] as int? ?? 500;
 
     _sfxEnabled = json['sfxEnabled'] as bool? ?? true;
+    _lastHydrateAt = (json['lastHydrateAt'] as num?)?.toInt() ?? 0;
+    _hydrationRushEndsAt = (json['hydrationRushEndsAt'] as num?)?.toInt() ?? 0;
+    _hydratedUntil = (json['hydratedUntil'] as num?)?.toInt() ?? 0;
     _bgmEnabled = json['bgmEnabled'] as bool? ?? true;
     _sfxVolume = (json['sfxVolume'] as num?)?.toDouble() ?? 0.8;
     _bgmVolume = (json['bgmVolume'] as num?)?.toDouble() ?? 0.5;
@@ -277,37 +305,70 @@ class GameController extends ChangeNotifier {
     if (rawObsByIsland != null) {
       for (final entry in rawObsByIsland.entries) {
         final list = entry.value as List<dynamic>? ?? [];
-        _obstaclesByIsland[entry.key] = list
-            .map((o) => ObstacleModel.fromJson(Map<String, dynamic>.from(o as Map)))
-            .toList();
+        _obstaclesByIsland[entry.key] = ObstacleModel.sanitizeSavedObstacles(
+          list
+              .map(
+                (o) => ObstacleModel.fromJson(
+                  Map<String, dynamic>.from(o as Map),
+                ),
+              )
+              .toList(),
+          islandId: entry.key,
+        );
       }
     } else {
       final rawObstacles = json['obstacles'] as List<dynamic>?;
       if (rawObstacles != null) {
-        _obstaclesByIsland[IslandCatalog.starterIslandId] = rawObstacles
-            .map((o) =>
-                ObstacleModel.fromJson(Map<String, dynamic>.from(o as Map)))
-            .toList();
+        _obstaclesByIsland[IslandCatalog.starterIslandId] =
+            ObstacleModel.sanitizeSavedObstacles(
+              rawObstacles
+                  .map(
+                    (o) => ObstacleModel.fromJson(
+                      Map<String, dynamic>.from(o as Map),
+                    ),
+                  )
+                  .toList(),
+            );
       } else {
         _obstaclesByIsland[IslandCatalog.starterIslandId] =
             ObstacleModel.defaultObstacles();
       }
     }
 
+    final defaults = TaskModel.defaultTasks();
     final rawTasks = json['tasks'] as List<dynamic>?;
     if (rawTasks != null && rawTasks.isNotEmpty) {
-      _tasks = rawTasks
+      final saved = rawTasks
           .map((t) => TaskModel.fromJson(Map<String, dynamic>.from(t as Map)))
           .toList();
+      final byId = {for (final t in saved) t.id: t};
+      _tasks = defaults.map((def) {
+        final match = byId[def.id];
+        if (match != null && match.type == def.type) {
+          def.progress = match.progress;
+          def.done = match.done;
+        }
+        return def;
+      }).toList();
+    } else {
+      _tasks = defaults;
     }
+    _syncTasksFromState();
 
     _selectedHabitatId = null;
     _selectedObstacleId = null;
 
-    SoundManager.instance.setBgmEnabled(_bgmEnabled);
-    SoundManager.instance.setSfxEnabled(_sfxEnabled);
-    SoundManager.instance.setBgmVolume(_bgmVolume);
-    SoundManager.instance.setSfxVolume(_sfxVolume);
+    if (SoundManager.instance.hasSavedAudioPrefs) {
+      _bgmEnabled = SoundManager.instance.bgmEnabled;
+      _bgmVolume = SoundManager.instance.bgmVolume;
+      _sfxEnabled = SoundManager.instance.sfxEnabled;
+      _sfxVolume = SoundManager.instance.sfxVolume;
+    } else {
+      SoundManager.instance.setBgmVolume(_bgmVolume, persist: false);
+      SoundManager.instance.setSfxVolume(_sfxVolume, persist: false);
+      SoundManager.instance.setBgmEnabled(_bgmEnabled, persist: false);
+      SoundManager.instance.setSfxEnabled(_sfxEnabled, persist: false);
+    }
 
     // Resolve any baking/income progress completed while the app was closed
     tickIncome();
@@ -676,6 +737,8 @@ class GameController extends ChangeNotifier {
   void tickIncome() {
     bool changed = false;
     final now = DateTime.now().millisecondsSinceEpoch;
+    final hydrated = isIslandHydrated;
+    final rushActive = isHydrationRushActive;
 
     for (final h in _placedHabitats) {
       if (h.underConstruction &&
@@ -697,10 +760,23 @@ class GameController extends ChangeNotifier {
           }
         }
       } else if (h.type == 'habitat' && h.maxCoins > 0) {
-        if (h.dogs.isNotEmpty && h.coinsAccumulated < h.maxCoins) {
+        if (h.dogs.isEmpty) {
+          if (h.coinsAccumulated != 0 || h.readyToCollect) {
+            h.coinsAccumulated = 0;
+            h.readyToCollect = false;
+            changed = true;
+          }
+        } else if (h.coinsAccumulated < h.maxCoins) {
           final dogRate = h.dogs.fold<int>(
               0, (sum, d) => sum + (30 + (d.level * 15)));
-          final add = min(h.maxCoins - h.coinsAccumulated, max(25, (dogRate / 4).round()));
+          final baseAdd = max(25, (dogRate / 4).round());
+          var adjustedAdd = hydrated
+              ? (baseAdd * 1.15).round()
+              : max(10, (baseAdd * 0.5).round());
+          if (rushActive) {
+            adjustedAdd *= 2;
+          }
+          final add = min(h.maxCoins - h.coinsAccumulated, adjustedAdd);
           h.coinsAccumulated += add;
           if (h.coinsAccumulated >= (h.maxCoins * 0.35).floor()) {
             h.readyToCollect = true;
@@ -738,6 +814,7 @@ class GameController extends ChangeNotifier {
     h.readyToCollectDogfood = false;
     h.dogfoodAccumulated = 0;
 
+    _recordTaskProgress('Bake');
     SoundManager.instance.playBake();
     if (currentWalkthroughStep?.id == WalkthroughStepId.bakeRecipe) {
       _walkthroughStepIndex += 1;
@@ -773,15 +850,57 @@ class GameController extends ChangeNotifier {
     return true;
   }
 
+  bool get isIslandHydrated =>
+      DateTime.now().millisecondsSinceEpoch < _hydratedUntil;
+
+  bool get isHydrationRushActive =>
+      DateTime.now().millisecondsSinceEpoch < _hydrationRushEndsAt;
+
+  int get hydrationRushRemainingSeconds {
+    final diff = _hydrationRushEndsAt - DateTime.now().millisecondsSinceEpoch;
+    return diff > 0 ? (diff / 1000).ceil() : 0;
+  }
+
+  int get hydrationCooldownRemainingSeconds {
+    final endsAt = _lastHydrateAt + 120000;
+    final diff = endsAt - DateTime.now().millisecondsSinceEpoch;
+    return diff > 0 ? (diff / 1000).ceil() : 0;
+  }
+
+  bool get canHydratePark => hydrationCooldownRemainingSeconds == 0;
+
+  /// Activates a 60s 2x Hydration Rush across the island and awards instant
+  /// bonus coins + XP. Returns coins awarded, or 0 if still on cooldown.
+  int hydratePark() {
+    if (!canHydratePark) return 0;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    _lastHydrateAt = now;
+    _hydrationRushEndsAt = now + 60000;
+    _hydratedUntil = now + 600000; // 10 minutes hydrated
+
+    final totalDogs = currentIslandHabitats.fold<int>(
+      0,
+      (sum, h) => sum + h.dogs.length,
+    );
+    final bonusCoins = max(25, totalDogs * 15);
+    _coins += bonusCoins;
+    _addXp(25);
+    recordCareTask();
+    SoundManager.instance.playQuestReward();
+    notifyListeners();
+    return bonusCoins;
+  }
+
   bool collectCoins(String habitatId) {
     final h = _placedHabitats.firstWhere((it) => it.id == habitatId,
         orElse: () => HabitatModel(id: '', habitatId: '', name: '', col: 0, row: 0));
-    if (h.id.isEmpty || h.coinsAccumulated <= 0) return false;
+    if (h.id.isEmpty || h.dogs.isEmpty || h.coinsAccumulated <= 0) return false;
 
     _coins += h.coinsAccumulated;
     h.coinsAccumulated = 0;
     h.readyToCollect = false;
     h.lastCollectTime = DateTime.now().millisecondsSinceEpoch;
+    _recordTaskProgress('Collect');
     SoundManager.instance.playCollectCoins();
     notifyListeners();
     return true;
@@ -859,6 +978,7 @@ class GameController extends ChangeNotifier {
 
     _placedHabitats.add(newHab);
     _selectedHabitatId = newHab.id;
+    _recordTaskProgress('Build');
     SoundManager.instance.playBuild();
     notifyListeners();
     return true;
@@ -939,7 +1059,7 @@ class GameController extends ChangeNotifier {
     final newDog = DogModel(
       id: 'dog_${DateTime.now().millisecondsSinceEpoch}',
       breedId: dogItem.id,
-      name: dogItem.id.contains('husky') ? 'Storm' : 'Max',
+      name: _pickUniqueDogName(dogItem.id),
       level: 1,
       feedProgress: 0,
       stage: 'Puppy',
@@ -949,10 +1069,104 @@ class GameController extends ChangeNotifier {
     );
 
     hab.dogs.add(newDog);
+    _recordTaskProgress('Build');
     SoundManager.instance.playLevelUp();
     SoundManager.instance.playDogBark(isPuppy: true, force: true);
     notifyListeners();
     return true;
+  }
+
+  /// Whether any built habitat on the current island has room (< 4 dogs) for a new puppy.
+  bool get hasHabitatSpace => currentIslandHabitats.any(
+        (h) => h.type == 'habitat' && !h.underConstruction && h.dogs.length < 4,
+      );
+
+  /// Places a newly bred purebred puppy into a habitat with space (< 4 dogs)
+  /// on the current island. Returns the destination habitat name, or null if full.
+  String? addBredPuppy(String breedId, String element) {
+    final openHabitats = currentIslandHabitats
+        .where(
+          (h) =>
+              h.type == 'habitat' &&
+              !h.underConstruction &&
+              h.dogs.length < 4,
+        )
+        .toList();
+    if (openHabitats.isEmpty) return null;
+
+    final el = element.toLowerCase();
+    final hab = openHabitats.firstWhere(
+      (h) =>
+          h.habitatId.toLowerCase().contains(el) ||
+          h.islandId.toLowerCase().contains(el),
+      orElse: () => openHabitats.first,
+    );
+
+    final newDog = DogModel(
+      id: 'dog_${DateTime.now().millisecondsSinceEpoch}',
+      breedId: breedId,
+      name: _pickUniqueDogName(breedId),
+      level: 1,
+      feedProgress: 0,
+      stage: 'Puppy',
+      element: element,
+      habitatId: hab.id,
+      habitatName: hab.name,
+    );
+
+    hab.dogs.add(newDog);
+    _recordTaskProgress('Build');
+    notifyListeners();
+    return hab.name;
+  }
+
+  static const List<String> _dogNamePool = [
+    'Bella', 'Charlie', 'Luna', 'Cooper', 'Daisy', 'Milo', 'Lucy', 'Rocky',
+    'Sadie', 'Buddy', 'Molly', 'Bear', 'Bailey', 'Duke', 'Lola', 'Leo',
+    'Zoe', 'Buster', 'Ruby', 'Tucker', 'Penny', 'Oliver', 'Rosie', 'Jack',
+    'Coco', 'Toby', 'Chloe', 'Zeus', 'Nala', 'Finn', 'Stella', 'Shadow',
+    'Nova', 'Bruno', 'Mochi', 'Koda', 'Max',
+  ];
+
+  /// Picks a dog name not currently used by any owned dog, with breed-flavored
+  /// options first so adopted and bred dogs don't repeat names like "Max".
+  String _pickUniqueDogName(String breedId) {
+    final used = _placedHabitats
+        .expand((h) => h.dogs)
+        .map((d) => d.name.trim().toLowerCase())
+        .toSet();
+    final b = breedId.toLowerCase();
+    final themed = <String>[
+      if (b.contains('husky') || b.contains('samoyed')) ...['Storm', 'Frost', 'Blizzard', 'Snowy'],
+      if (b.contains('shiba')) ...['Kiba', 'Yuki', 'Hachi', 'Sora'],
+      if (b.contains('pharaoh')) ...['Anubis', 'Sahara', 'Cairo', 'Sunny'],
+      if (b.contains('astral')) ...['Comet', 'Orion', 'Nebula', 'Astro'],
+      if (b.contains('chronos')) ...['Atlas', 'Chrono', 'Titan', 'Echo'],
+    ];
+    final candidates = [...themed, ..._dogNamePool];
+    final available =
+        candidates.where((n) => !used.contains(n.toLowerCase())).toList();
+    if (available.isNotEmpty) {
+      return available[Random().nextInt(available.length)];
+    }
+    final base = _dogNamePool[Random().nextInt(_dogNamePool.length)];
+    var suffix = 2;
+    while (used.contains('$base $suffix'.toLowerCase())) {
+      suffix++;
+    }
+    return '$base $suffix';
+  }
+
+  /// Formats currency with commas (e.g. `12,500`) or rounded millions (`1.5M`, `2M`).
+  static String formatCoins(int n) {
+    if (n >= 1000000) {
+      final m = (n / 1000000).toStringAsFixed(1);
+      return '${m.endsWith('.0') ? m.substring(0, m.length - 2) : m}M';
+    }
+    return n.toString().replaceAllMapped(
+          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+          (Match m) => '${m[1]},',
+        );
   }
 
   /// Dragon City 4-step Feeding system:
@@ -972,6 +1186,7 @@ class GameController extends ChangeNotifier {
             _kibble -= info.kibbleCostPerFeed;
             _coins += info.coinsRewardPerFeed;
             _addXp(info.xpRewardPerFeed);
+            _recordTaskProgress('Feed');
             SoundManager.instance.playFeed();
 
             d.feedProgress += 1;
@@ -1024,6 +1239,10 @@ class GameController extends ChangeNotifier {
         final initialLen = h.dogs.length;
         h.dogs.removeWhere((d) => d.id == dogId);
         if (h.dogs.length < initialLen) {
+          if (h.dogs.isEmpty) {
+            h.coinsAccumulated = 0;
+            h.readyToCollect = false;
+          }
           _coins += refundCoins;
           SoundManager.instance.playSadWhimper();
           notifyListeners();
@@ -1051,6 +1270,10 @@ class GameController extends ChangeNotifier {
     if (dogIdx == -1) return false;
 
     final dog = fromHab.dogs.removeAt(dogIdx);
+    if (fromHab.dogs.isEmpty) {
+      fromHab.coinsAccumulated = 0;
+      fromHab.readyToCollect = false;
+    }
     dog.habitatId = toHab.id;
     dog.habitatName = toHab.name;
     toHab.dogs.add(dog);
@@ -1059,6 +1282,33 @@ class GameController extends ChangeNotifier {
     SoundManager.instance.playDogBark(isPuppy: dog.isPuppy);
     notifyListeners();
     return true;
+  }
+
+  void _syncTasksFromState() {
+    final allDogs = _placedHabitats.expand((h) => h.dogs).toList();
+    if (allDogs.any((d) => d.feedProgress > 0 || d.level > 1)) {
+      _recordTaskProgress('Feed');
+    }
+    if (_placedHabitats.any(
+        (h) => h.isFactory && (h.isBaking || h.readyToCollectDogfood || h.dogfoodAccumulated > 0))) {
+      _recordTaskProgress('Bake');
+    }
+    if (_placedHabitats.length > 2 || allDogs.length > 1) {
+      _recordTaskProgress('Build');
+    }
+  }
+
+  void recordCareTask() {
+    _recordTaskProgress('Care');
+    notifyListeners();
+  }
+
+  void _recordTaskProgress(String type, [int amount = 1]) {
+    for (final t in _tasks) {
+      if (t.type == type && !t.done && t.progress < t.target) {
+        t.progress = min(t.target, t.progress + amount);
+      }
+    }
   }
 
   void careAction(String action) {
@@ -1080,6 +1330,7 @@ class GameController extends ChangeNotifier {
         _addXp(10);
         break;
     }
+    _recordTaskProgress('Care');
     SoundManager.instance.playPet();
     SoundManager.instance.playDogBark(isPuppy: true);
     notifyListeners();
@@ -1087,7 +1338,7 @@ class GameController extends ChangeNotifier {
 
   void completeTask(String taskId) {
     for (final t in _tasks) {
-      if (t.id == taskId && !t.done) {
+      if (t.id == taskId && !t.done && t.isCompleted) {
         t.done = true;
         _coins += t.rewardCoins;
         _crystals += t.rewardCrystals;

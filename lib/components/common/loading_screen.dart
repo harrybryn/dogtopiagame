@@ -6,7 +6,7 @@ import 'loading_progress_bar.dart';
 
 /// LoadingScreen
 /// Parameters:
-///   [onFinish]  – called when the fake-load reaches 100% and the fade-out ends
+///   [onFinish]  – called when the load reaches 100% and the fade-out ends
 ///   [duration]  – total loading duration (default 3 seconds)
 class LoadingScreen extends StatefulWidget {
   final VoidCallback onFinish;
@@ -27,20 +27,15 @@ class _LoadingScreenState extends State<LoadingScreen>
   double _progress = 0; // 0–100
   bool _fadeOut = false;
   int _tipIndex = 0;
-  bool _isAssetsLoaded = false;
   bool _initialized = false;
 
-  late AnimationController _logoController;
-  late Animation<double> _logoOpacity;
-  late Animation<Offset> _logoSlide;
-  late Animation<double> _logoScale;
+  late final AnimationController _entryController;
+  late final Animation<double> _logoOpacity;
+  late final Animation<double> _logoScale;
+  late final Animation<double> _barOpacity;
 
-  late AnimationController _fadeUpController;
-  late Animation<double> _fadeUpOpacity;
-  late Animation<Offset> _fadeUpSlide;
-
-  late AnimationController _rayController;
-  late AnimationController _pawController;
+  late final AnimationController _ambientController;
+  late final AnimationController _rayController;
 
   Timer? _progressTimer;
   Timer? _tipTimer;
@@ -51,54 +46,45 @@ class _LoadingScreenState extends State<LoadingScreen>
     'Complete daily quests to earn bonus gems.',
     'Level up your dogs to unlock new habitats.',
     'Visit friends to collect bonus gold.',
-    'Some breeds only appear during special events.',
+    'Bake tasty kibble in the Dogfood Factory!',
   ];
 
   static const String _bgAsset = 'assets/images/Loading_screen_bg.webp';
-  static const String _logoAsset = 'assets/ui/logo.webp';
+  static const String _logoAsset = 'assets/images/DogtopiaLogo_transparent.webp';
 
   @override
   void initState() {
     super.initState();
 
-    // Logo drop-in animation
-    _logoController = AnimationController(
+    _entryController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 900),
     );
     _logoOpacity = Tween(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _logoController, curve: Curves.easeOut),
+      CurvedAnimation(
+        parent: _entryController,
+        curve: const Interval(0.0, 0.7, curve: Curves.easeOut),
+      ),
     );
-    _logoSlide = Tween(begin: const Offset(0, -0.3), end: Offset.zero).animate(
-      CurvedAnimation(parent: _logoController, curve: Curves.elasticOut),
+    _logoScale = Tween(begin: 0.82, end: 1.0).animate(
+      CurvedAnimation(parent: _entryController, curve: Curves.easeOutBack),
     );
-    _logoScale = Tween(begin: 0.85, end: 1.0).animate(
-      CurvedAnimation(parent: _logoController, curve: Curves.elasticOut),
+    _barOpacity = Tween(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _entryController,
+        curve: const Interval(0.3, 1.0, curve: Curves.easeOut),
+      ),
     );
 
-    // Fade-up for progress bar
-    _fadeUpController = AnimationController(
+    _ambientController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 600),
-    );
-    _fadeUpOpacity = Tween(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _fadeUpController, curve: Curves.easeOut),
-    );
-    _fadeUpSlide = Tween(begin: const Offset(0, 0.1), end: Offset.zero).animate(
-      CurvedAnimation(parent: _fadeUpController, curve: Curves.easeOut),
-    );
+      duration: const Duration(milliseconds: 3200),
+    )..repeat(reverse: true);
 
-    // Spinning light rays
     _rayController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 12),
+      duration: const Duration(seconds: 18),
     )..repeat();
-
-    // Paw float animation
-    _pawController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1600),
-    )..repeat(reverse: true);
   }
 
   @override
@@ -106,56 +92,42 @@ class _LoadingScreenState extends State<LoadingScreen>
     super.didChangeDependencies();
     if (!_initialized) {
       _initialized = true;
-      _preloadImages();
+      _startLoadingSequence();
     }
   }
 
-  Future<void> _preloadImages() async {
+  Future<void> _startLoadingSequence() async {
+    _entryController.forward();
+    _startProgressTicker();
+    _startTipRotation();
+
     try {
       await Future.wait([
         precacheImage(const AssetImage(_bgAsset), context),
         precacheImage(const AssetImage(_logoAsset), context),
       ]);
     } catch (_) {
-      // Fallback if loading screen bg isn't found
-      try {
-        await precacheImage(const AssetImage('assets/ui/splash-bg.webp'), context);
-      } catch (_) {}
+      // Ignore precache errors in headless/test environments.
     }
-
-    if (!mounted) return;
-
-    setState(() {
-      _isAssetsLoaded = true;
-    });
-
-    // Start entry animations now that the image is guaranteed to be ready
-    _logoController.forward();
-    Future.delayed(const Duration(milliseconds: 400), () {
-      if (mounted) _fadeUpController.forward();
-    });
-
-    _startProgressTicker();
-    _startTipRotation();
   }
 
   void _startProgressTicker() {
     const steps = 60;
-    final intervalMs = widget.duration.inMilliseconds ~/ steps;
+    final intervalMs = max(16, widget.duration.inMilliseconds ~/ steps);
     double current = 0;
 
     _progressTimer = Timer.periodic(Duration(milliseconds: intervalMs), (timer) {
-      current += (100 / steps) + (_random.nextDouble() * 2 - 1);
+      current += (100 / steps) + (_random.nextDouble() * 1.4 - 0.5);
       current = current.clamp(0, 100);
 
       if (mounted) setState(() => _progress = current.floorToDouble());
 
       if (current >= 100) {
         timer.cancel();
-        Future.delayed(const Duration(milliseconds: 400), () {
+        Future.delayed(const Duration(milliseconds: 300), () {
           if (mounted) setState(() => _fadeOut = true);
-          Future.delayed(const Duration(milliseconds: 700), () {
-            widget.onFinish();
+          Future.delayed(const Duration(milliseconds: 600), () {
+            if (mounted) widget.onFinish();
           });
         });
       }
@@ -174,10 +146,9 @@ class _LoadingScreenState extends State<LoadingScreen>
   void dispose() {
     _progressTimer?.cancel();
     _tipTimer?.cancel();
-    _logoController.dispose();
-    _fadeUpController.dispose();
+    _entryController.dispose();
+    _ambientController.dispose();
     _rayController.dispose();
-    _pawController.dispose();
     super.dispose();
   }
 
@@ -185,235 +156,319 @@ class _LoadingScreenState extends State<LoadingScreen>
   Widget build(BuildContext context) {
     return AnimatedOpacity(
       opacity: _fadeOut ? 0.0 : 1.0,
-      duration: const Duration(milliseconds: 700),
+      duration: const Duration(milliseconds: 600),
       child: IgnorePointer(
         ignoring: _fadeOut,
         child: Container(
-          color: const Color(0xFF120601),
+          color: const Color(0xFF1A0D04),
           child: Stack(
             fit: StackFit.expand,
             children: [
-              // ── Background image (High Quality & Pre-cached) ──
-              Image.asset(
-                _bgAsset,
-                fit: BoxFit.cover,
-                filterQuality: FilterQuality.high,
-                isAntiAlias: true,
-                errorBuilder: (context, error, stackTrace) {
-                  return Image.asset(
-                    'assets/ui/splash-bg.webp',
-                    fit: BoxFit.cover,
-                    filterQuality: FilterQuality.high,
-                    isAntiAlias: true,
-                  );
+              // ── Background image with gentle slow zoom ──
+              AnimatedBuilder(
+                animation: _ambientController,
+                builder: (_, child) {
+                  final zoom =
+                      1.0 + 0.035 * Curves.easeInOut.transform(_ambientController.value);
+                  return Transform.scale(scale: zoom, child: child);
                 },
-              ),
-
-              // ── Sky gradient overlay (bottom softener) ──
-              Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.transparent,
-                      Colors.transparent,
-                      Color(0x990c4a6e),
-                    ],
-                    stops: [0.0, 0.5, 1.0],
+                child: Image.asset(
+                  _bgAsset,
+                  fit: BoxFit.cover,
+                  filterQuality: FilterQuality.high,
+                  isAntiAlias: true,
+                  errorBuilder: (_, _, _) => const DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Color(0xFF0EA5E9), Color(0xFF0369A1)],
+                      ),
+                    ),
                   ),
                 ),
               ),
 
-              // ── Animated golden light rays ──
+              // ── Soft sky & bottom vignette for clear foreground contrast ──
+              const DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Color(0x33071E3D),
+                      Color(0x11000000),
+                      Color(0xBB1E0E04),
+                    ],
+                    stops: [0.0, 0.48, 1.0],
+                  ),
+                ),
+              ),
+
+              // ── Rotating game-style sunburst rays ──
               AnimatedBuilder(
                 animation: _rayController,
-                builder: (_, __) {
-                  return Stack(
-                    alignment: Alignment.center,
-                    children: List.generate(8, (i) {
-                      return Opacity(
-                        opacity: 0.2,
-                        child: Transform.rotate(
-                          angle: (i * 45 * pi / 180) +
-                              (_rayController.value * 2 * pi),
-                          child: Container(
-                            width: 3,
-                            height: MediaQuery.of(context).size.height * 0.55,
-                            decoration: const BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.bottomCenter,
-                                end: Alignment.topCenter,
-                                colors: [Colors.transparent, Color(0xFFfde68a)],
-                              ),
-                            ),
-                          ),
+                builder: (_, _) {
+                  final size = MediaQuery.sizeOf(context);
+                  final diameter = max(size.width, size.height) * 1.1;
+                  return Center(
+                    child: Transform.translate(
+                      offset: Offset(0, -size.height * 0.08),
+                      child: Transform.rotate(
+                        angle: _rayController.value * 2 * pi,
+                        child: CustomPaint(
+                          size: Size(diameter, diameter),
+                          painter: const _SunburstPainter(),
                         ),
-                      );
-                    }),
-                  );
-                },
-              ),
-
-              // ── Floating paw prints ──
-              AnimatedBuilder(
-                animation: _pawController,
-                builder: (_, __) {
-                  return Stack(
-                    children: List.generate(6, (i) {
-                      final floatOffset = (_pawController.value * 2 - 1) * 9;
-                      final rotateAngle = (_pawController.value * 2 - 1) *
-                          10 *
-                          pi /
-                          180;
-                      return Positioned(
-                        left: MediaQuery.of(context).size.width *
-                            (0.10 + i * 0.15),
-                        bottom: MediaQuery.of(context).size.height *
-                            (0.15 + (i % 3) * 0.12) +
-                            floatOffset,
-                        child: Opacity(
-                          opacity: 0.6,
-                          child: Transform.rotate(
-                            angle: rotateAngle,
-                            child: const Text('🐾',
-                                style: TextStyle(fontSize: 24)),
-                          ),
-                        ),
-                      );
-                    }),
-                  );
-                },
-              ),
-
-              // ── Centered content (only shows after assets preloaded) ──
-              if (_isAssetsLoaded)
-                Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // Logo drop-in
-                    AnimatedBuilder(
-                      animation: _logoController,
-                      builder: (_, __) {
-                        return FadeTransition(
-                          opacity: _logoOpacity,
-                          child: SlideTransition(
-                            position: _logoSlide,
-                            child: ScaleTransition(
-                              scale: _logoScale,
-                              child: Container(
-                                constraints: const BoxConstraints(maxWidth: 480),
-                                width: MediaQuery.of(context).size.width * 0.75,
-                                child: Image.asset(
-                                  _logoAsset,
-                                  fit: BoxFit.contain,
-                                  filterQuality: FilterQuality.high,
-                                  isAntiAlias: true,
-                                ),
-                              ),
-                            ),
-                          ),
-                        );
-                      },
+                      ),
                     ),
+                  );
+                },
+              ),
 
-                    const SizedBox(height: 48),
+              // ── Responsive Foreground Content ──
+              SafeArea(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final w = constraints.maxWidth;
+                    final h = constraints.maxHeight;
+                    final isCompact = h < 440;
 
-                    // Progress bar + percentage
-                    AnimatedBuilder(
-                      animation: _fadeUpController,
-                      builder: (_, __) {
-                        return FadeTransition(
-                          opacity: _fadeUpOpacity,
-                          child: SlideTransition(
-                            position: _fadeUpSlide,
-                            child: Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 32),
+                    final logoMaxW = min(w * 0.78, isCompact ? 300.0 : 460.0);
+                    final logoMaxH = h * (isCompact ? 0.40 : 0.36);
+                    final barMaxW = min(w * 0.84, 460.0);
+
+                    return Center(
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: isCompact ? 10 : 24,
+                        ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // ── Floating Logo with Warm Glow ──
+                            AnimatedBuilder(
+                              animation: Listenable.merge(
+                                [_entryController, _ambientController],
+                              ),
+                              builder: (_, child) {
+                                final floatY = sin(
+                                      _ambientController.value * pi,
+                                    ) *
+                                    -6.0;
+                                return Opacity(
+                                  opacity: _logoOpacity.value,
+                                  child: Transform.translate(
+                                    offset: Offset(0, floatY),
+                                    child: Transform.scale(
+                                      scale: _logoScale.value,
+                                      child: child,
+                                    ),
+                                  ),
+                                );
+                              },
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  Container(
+                                    width: logoMaxW * 0.72,
+                                    height: logoMaxH * 0.65,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: const Color(0xFFFDE047)
+                                              .withValues(alpha: 0.28),
+                                          blurRadius: 64,
+                                          spreadRadius: 12,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  ConstrainedBox(
+                                    constraints: BoxConstraints(
+                                      maxWidth: logoMaxW,
+                                      maxHeight: logoMaxH,
+                                    ),
+                                    child: Image.asset(
+                                      _logoAsset,
+                                      fit: BoxFit.contain,
+                                      filterQuality: FilterQuality.high,
+                                      isAntiAlias: true,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                            SizedBox(height: isCompact ? 14 : 28),
+
+                            // ── Progress Bar + Status Label ──
+                            FadeTransition(
+                              opacity: _barOpacity,
                               child: ConstrainedBox(
-                                constraints:
-                                    const BoxConstraints(maxWidth: 480),
+                                constraints: BoxConstraints(maxWidth: barMaxW),
                                 child: Column(
+                                  mainAxisSize: MainAxisSize.min,
                                   children: [
                                     LoadingProgressBar(progress: _progress),
-                                    const SizedBox(height: 8),
-                                    // Percentage label
-                                    Text(
-                                      '${_progress.toInt()}%',
-                                      style: TextStyle(
-                                        color: const Color(0xFFfde68a),
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w900,
-                                        letterSpacing: 3,
-                                        shadows: [
-                                          const Shadow(
-                                            color: Color(0xFF78350f),
-                                            offset: Offset(0, 2),
-                                            blurRadius: 4,
-                                          ),
-                                          Shadow(
-                                            color: const Color(0xFFf59e0b)
-                                                .withOpacity(0.7),
-                                            blurRadius: 14,
-                                          ),
-                                        ],
+                                    SizedBox(height: isCompact ? 6 : 10),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 14,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xAA261105),
+                                        borderRadius: BorderRadius.circular(14),
+                                        border: Border.all(
+                                          color: const Color(0x88FDE68A),
+                                          width: 1,
+                                        ),
+                                      ),
+                                      child: Text(
+                                        'LOADING ISLAND... ${_progress.toInt()}%',
+                                        style: const TextStyle(
+                                          fontFamily: 'Lilita One',
+                                          color: Color(0xFFFDE68A),
+                                          fontSize: 13,
+                                          letterSpacing: 1.6,
+                                          shadows: [
+                                            Shadow(
+                                              color: Color(0xCC000000),
+                                              offset: Offset(0, 1.5),
+                                              blurRadius: 3,
+                                            ),
+                                          ],
+                                        ),
                                       ),
                                     ),
                                   ],
                                 ),
                               ),
                             ),
-                          ),
-                        );
-                      },
-                    ),
 
-                    const SizedBox(height: 16),
+                            SizedBox(height: isCompact ? 10 : 18),
 
-                    // Rotating tip text
-                    AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 400),
-                      transitionBuilder: (child, animation) {
-                        return FadeTransition(
-                          opacity: animation,
-                          child: SlideTransition(
-                            position: Tween(
-                              begin: const Offset(0, 0.1),
-                              end: Offset.zero,
-                            ).animate(animation),
-                            child: child,
-                          ),
-                        );
-                      },
-                      child: Padding(
-                        key: ValueKey(_tipIndex),
-                        padding: const EdgeInsets.symmetric(horizontal: 32),
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 400),
-                          child: Text(
-                            _tips[_tipIndex],
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: const Color(0xFFfef3c7).withOpacity(0.9),
-                              fontSize: 13,
-                              shadows: const [
-                                Shadow(
-                                  color: Color(0x99000000),
-                                  offset: Offset(0, 1),
-                                  blurRadius: 4,
+                            // ── Rotating Tip Pill ──
+                            FadeTransition(
+                              opacity: _barOpacity,
+                              child: AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 380),
+                                transitionBuilder: (child, anim) {
+                                  return FadeTransition(
+                                    opacity: anim,
+                                    child: SlideTransition(
+                                      position: Tween(
+                                        begin: const Offset(0, 0.12),
+                                        end: Offset.zero,
+                                      ).animate(anim),
+                                      child: child,
+                                    ),
+                                  );
+                                },
+                                child: Container(
+                                  key: ValueKey(_tipIndex),
+                                  constraints: BoxConstraints(
+                                    maxWidth: min(w * 0.88, 420.0),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 7,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0x991C0B03),
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(
+                                      color: const Color(0x44FDE68A),
+                                      width: 1,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(
+                                        Icons.pets_rounded,
+                                        color: Color(0xFFFBBF24),
+                                        size: 15,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Flexible(
+                                        child: Text(
+                                          _tips[_tipIndex],
+                                          textAlign: TextAlign.center,
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            color: Color(0xFFFEF3C7),
+                                            fontSize: 12.5,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ],
+                              ),
                             ),
-                          ),
+                          ],
                         ),
                       ),
-                    ),
-                  ],
+                    );
+                  },
                 ),
+              ),
             ],
           ),
         ),
       ),
     );
   }
+}
+
+/// Draws classic game-style conical sunburst rays that taper at the center
+/// and fade smoothly outward.
+class _SunburstPainter extends CustomPainter {
+  const _SunburstPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2;
+
+    final paint = Paint()
+      ..shader = RadialGradient(
+        colors: [
+          const Color(0xFFFEF08A).withValues(alpha: 0.24),
+          const Color(0xFFFDE047).withValues(alpha: 0.09),
+          Colors.transparent,
+        ],
+        stops: const [0.0, 0.45, 1.0],
+      ).createShader(Rect.fromCircle(center: center, radius: radius));
+
+    const rayCount = 12;
+    const step = (2 * pi) / rayCount;
+    const halfSpread = step * 0.22;
+
+    for (int i = 0; i < rayCount; i++) {
+      final a = i * step;
+      final path = Path()
+        ..moveTo(center.dx, center.dy)
+        ..lineTo(
+          center.dx + cos(a - halfSpread) * radius,
+          center.dy + sin(a - halfSpread) * radius,
+        )
+        ..lineTo(
+          center.dx + cos(a + halfSpread) * radius,
+          center.dy + sin(a + halfSpread) * radius,
+        )
+        ..close();
+      canvas.drawPath(path, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

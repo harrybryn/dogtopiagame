@@ -97,6 +97,7 @@ class WorldIsometricGrid extends StatefulWidget {
   final bool isLotExpansionUnlocked;
   final bool isLot1Unlocked;
   final bool isLot2Unlocked;
+  final bool isIslandHydrated;
   final Function(ObstacleModel)? onSelectObstacle;
   final Function(String obstacleId)? onStartClearingObstacle;
   final Function(String obstacleId)? onCompleteClearingObstacle;
@@ -128,6 +129,7 @@ class WorldIsometricGrid extends StatefulWidget {
     this.isLotExpansionUnlocked = false,
     this.isLot1Unlocked = false,
     this.isLot2Unlocked = false,
+    this.isIslandHydrated = true,
     this.onSelectObstacle,
     this.onStartClearingObstacle,
     this.onCompleteClearingObstacle,
@@ -140,12 +142,14 @@ class WorldIsometricGrid extends StatefulWidget {
 }
 
 class _WorldIsometricGridState extends State<WorldIsometricGrid>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late AnimationController _bounceController;
+  late AnimationController _ambientController;
   Timer? _oneSecTimer;
   int _now = DateTime.now().millisecondsSinceEpoch;
   int _ghostCol = 11;
   int _ghostRow = 9;
+  final List<ObstacleModel> _vanishingObstacles = [];
 
   @override
   void initState() {
@@ -154,19 +158,36 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
       vsync: this,
       duration: const Duration(milliseconds: 1400),
     )..repeat(reverse: true);
+    _ambientController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 4200),
+    )..repeat();
 
     _oneSecTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) {
-        final now = DateTime.now().millisecondsSinceEpoch;
-        setState(() {
-          _now = now;
-        });
-        for (final hab in widget.habitats) {
-          if (hab.underConstruction &&
-              (hab.constructionEndsAt ?? 0) > 0 &&
-              now >= hab.constructionEndsAt!) {
-            widget.onCompleteConstruction?.call(hab.id);
-          }
+      if (!mounted) return;
+      final hasActiveTimers =
+          widget.habitats.any((h) => h.underConstruction) ||
+          widget.obstacles.any((o) => o.isClearing);
+      if (!hasActiveTimers) return;
+
+      final now = DateTime.now().millisecondsSinceEpoch;
+      setState(() {
+        _now = now;
+      });
+      for (final hab in widget.habitats) {
+        if (hab.underConstruction &&
+            (hab.constructionEndsAt ?? 0) > 0 &&
+            now >= hab.constructionEndsAt!) {
+          widget.onCompleteConstruction?.call(hab.id);
+        }
+      }
+      for (final obs in widget.obstacles) {
+        if (obs.isClearing &&
+            (obs.clearingEndsAt ?? 0) > 0 &&
+            now >= obs.clearingEndsAt! &&
+            !_vanishingObstacles.any((v) => v.id == obs.id)) {
+          _triggerObstacleVanish(obs);
+          widget.onCompleteClearingObstacle?.call(obs.id);
         }
       }
     });
@@ -177,6 +198,7 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
   @override
   void dispose() {
     _bounceController.dispose();
+    _ambientController.dispose();
     _oneSecTimer?.cancel();
     super.dispose();
   }
@@ -188,6 +210,23 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
         widget.placingItem != oldWidget.placingItem) {
       _syncGhostPos();
     }
+    if (widget.habitats.any((h) => h.underConstruction) ||
+        widget.obstacles.any((o) => o.isClearing)) {
+      _now = DateTime.now().millisecondsSinceEpoch;
+    }
+    final currentIds = widget.obstacles.map((o) => o.id).toSet();
+    for (final oldObs in oldWidget.obstacles) {
+      if (oldObs.isClearing && !currentIds.contains(oldObs.id)) {
+        _triggerObstacleVanish(oldObs);
+      }
+    }
+  }
+
+  void _triggerObstacleVanish(ObstacleModel obs) {
+    if (_vanishingObstacles.any((v) => v.id == obs.id)) return;
+    setState(() {
+      _vanishingObstacles.add(obs);
+    });
   }
 
   void _syncGhostPos() {
@@ -302,25 +341,29 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
       height: worldHeight,
       child: Stack(
         children: [
-          // ── Background Island Surface ──
+          // ── Background Island Surface + Locked Lot Overlay (cached on GPU) ──
           Positioned.fill(
-            child: Image.asset(
-              widget.surfaceAsset,
-              fit: BoxFit.cover,
-              filterQuality: FilterQuality.high,
-            ),
-          ),
-
-          // ── Locked Lot Territory Translucent Overlay ──
-          if (!widget.isLot1Unlocked || !widget.isLot2Unlocked)
-            Positioned.fill(
-              child: CustomPaint(
-                painter: _LockedLotTerritoryPainter(
-                  isLot1Unlocked: widget.isLot1Unlocked,
-                  isLot2Unlocked: widget.isLot2Unlocked,
-                ),
+            child: RepaintBoundary(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Image.asset(
+                    widget.surfaceAsset,
+                    fit: BoxFit.cover,
+                    cacheWidth: 2000,
+                    filterQuality: FilterQuality.medium,
+                  ),
+                  if (!widget.isLot1Unlocked || !widget.isLot2Unlocked)
+                    CustomPaint(
+                      painter: _LockedLotTerritoryPainter(
+                        isLot1Unlocked: widget.isLot1Unlocked,
+                        isLot2Unlocked: widget.isLot2Unlocked,
+                      ),
+                    ),
+                ],
               ),
             ),
+          ),
 
           // ── Grid Lines Layer (if placing or gridVisible) ──
           if (widget.gridVisible || isPlacing)
@@ -398,6 +441,16 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
             for (final hab in widget.habitats)
               if (hab.underConstruction && (hab.constructionEndsAt ?? 0) > _now)
                 _buildConstructionOverlay(hab),
+
+          // ── Vanishing Obstacle Animations (just cleared) ──
+          for (final obs in _vanishingObstacles)
+            _buildVanishingObstacleWidget(obs),
+
+          // ── Floating Coin & Kibble Collection Bubbles (topmost for full hit-testing) ──
+          if (!isPlacing && !widget.isSelectingHabitat && !widget.isOverview)
+            for (final hab in widget.habitats)
+              if (!(hab.underConstruction && (hab.constructionEndsAt ?? 0) > _now))
+                ..._buildCollectionBubbles(hab),
 
           // ── 2 FOR SALE Wooden Signs on Locked Expansion Lots ──
           if (!widget.isLot1Unlocked && !isPlacing && !widget.isOverview)
@@ -545,12 +598,16 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
               opacity: (widget.isSelectingHabitat && !isCompatible)
                   ? 0.38
                   : 1.0,
-              child: Image.asset(
-                imageAsset,
-                width: imgW,
-                height: imgH,
-                fit: BoxFit.contain,
-                filterQuality: FilterQuality.high,
+              child: _wrapAmbientMotion(
+                hab: hab,
+                child: Image.asset(
+                  imageAsset,
+                  width: imgW,
+                  height: imgH,
+                  fit: BoxFit.contain,
+                  cacheWidth: 360,
+                  filterQuality: FilterQuality.medium,
+                ),
               ),
             ),
 
@@ -561,120 +618,176 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
                 child: _buildHabitatPointingArrow(hab),
               ),
 
-            // Resident Dog(s) wander only when NOT under construction
-            if (!isUnderConstruction && hab.dogs.isNotEmpty) ...[
-              for (int i = 0; i < hab.dogs.length && i < 4; i++)
-                HabitatWanderingDog(
-                  key: ValueKey('${hab.id}_dog_${hab.dogs[i].id}_$i'),
-                  dog: hab.dogs[i],
+            // Resident Dog(s) wander with separation & dynamic Y-depth sorting
+            if (!isUnderConstruction && hab.dogs.isNotEmpty)
+              Positioned.fill(
+                child: HabitatPatrolGroup(
+                  key: ValueKey('${hab.id}_patrol'),
+                  habitatId: hab.id,
+                  dogs: hab.dogs,
                   center: Offset(imgW / 2, corners.center.dy - imgY),
-                  dogIndex: i,
+                  isThirsty: !widget.isIslandHydrated,
                   onTap: () => widget.onSelectHabitat(hab),
                 ),
-            ],
-
-            // ── Floating Coin Collection Bubble (Using CollectPlaceHolder asset) ──
-            if (!isUnderConstruction &&
-                !widget.isSelectingHabitat &&
-                !widget.isOverview &&
-                hab.readyToCollect &&
-                hab.coinsAccumulated > 0)
-              AnimatedBuilder(
-                animation: _bounceController,
-                builder: (_, __) {
-                  final floatY = _bounceController.value * 8;
-                  const double bubbleSize = 56.0;
-                  return Positioned(
-                    top: -36 - floatY,
-                    left: (imgW - bubbleSize) / 2,
-                    child: HoverScale(
-                      scale: 1.15,
-                      onTap: () => widget.onCollectCoins(hab.id),
-                      tooltip: 'Collect ${hab.coinsAccumulated} Paw Coins!',
-                      child: SizedBox(
-                        width: bubbleSize,
-                        height: bubbleSize,
-                        child: Stack(
-                          alignment: Alignment.topCenter,
-                          children: [
-                            // 3D Golden Bubble Asset
-                            Image.asset(
-                              'assets/ui/CollectPlaceHolder.png',
-                              width: 56,
-                              height: 56,
-                              fit: BoxFit.contain,
-                              filterQuality: FilterQuality.high,
-                            ),
-                            // Coin Icon floating in the center of the bubble
-                            Positioned(
-                              top: 13,
-                              child: Image.asset(
-                                'assets/ui/coins.png',
-                                width: 28,
-                                height: 28,
-                                fit: BoxFit.contain,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                },
               ),
 
-            // ── Floating Dogfood Collection Bubble (Using CollectPlaceHolder asset) ──
-            if (!isUnderConstruction &&
-                !widget.isSelectingHabitat &&
-                !widget.isOverview &&
-                hab.readyToCollectDogfood &&
-                hab.dogfoodAccumulated > 0)
-              AnimatedBuilder(
-                animation: _bounceController,
-                builder: (_, __) {
-                  final floatY = _bounceController.value * 8;
-                  const double bubbleSize = 56.0;
-                  return Positioned(
-                    top: -36 - floatY,
-                    left: (imgW - bubbleSize) / 2,
-                    child: HoverScale(
-                      scale: 1.15,
-                      onTap: () => widget.onCollectDogfood(hab.id),
-                      tooltip: 'Collect ${hab.dogfoodAccumulated} Kibble!',
-                      child: SizedBox(
-                        width: bubbleSize,
-                        height: bubbleSize,
-                        child: Stack(
-                          alignment: Alignment.topCenter,
-                          children: [
-                            // 3D Golden Bubble Asset
-                            Image.asset(
-                              'assets/ui/CollectPlaceHolder.png',
-                              width: 56,
-                              height: 56,
-                              fit: BoxFit.contain,
-                              filterQuality: FilterQuality.high,
-                            ),
-                            // Food Icon floating in the center of the bubble
-                            Positioned(
-                              top: 14,
-                              child: Image.asset(
-                                'assets/ui/dogfood.png',
-                                width: 26,
-                                height: 26,
-                                fit: BoxFit.contain,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _wrapAmbientMotion({
+    required HabitatModel hab,
+    required Widget child,
+  }) {
+    if (hab.underConstruction) return child;
+
+    final id = hab.habitatId.toLowerCase();
+    final isSwayingDecor = id.contains('palm') ||
+        id.contains('tree') ||
+        id.contains('bush') ||
+        id.contains('flower');
+    final isFloating = id.contains('cloud') || id == 'legendary';
+    final isBaking = hab.isBaking;
+
+    if (!isSwayingDecor && !isFloating && !isBaking) return child;
+
+    final phaseOffset = hab.col * 0.9 + hab.row * 0.7;
+    return RepaintBoundary(
+      child: AnimatedBuilder(
+        animation: _ambientController,
+        builder: (_, inner) {
+          final t = _ambientController.value * 2 * pi + phaseOffset;
+          if (isSwayingDecor) {
+            return Transform.rotate(
+              alignment: Alignment.bottomCenter,
+              angle: sin(t) * 0.03,
+              child: inner,
+            );
+          }
+          if (isFloating) {
+            return Transform.translate(
+              offset: Offset(0, sin(t) * 3.0),
+              child: inner,
+            );
+          }
+          // Dogfood Factory active baking pulse
+          final pulse = sin(_ambientController.value * 6 * pi);
+          return Transform(
+            alignment: Alignment.bottomCenter,
+            transform: Matrix4.identity()
+              ..scaleByDouble(
+                1.0 - 0.015 * pulse,
+                1.0 + 0.02 * pulse,
+                1.0,
+                1.0,
+              ),
+            child: inner,
+          );
+        },
+        child: child,
+      ),
+    );
+  }
+
+  List<Widget> _buildCollectionBubbles(HabitatModel hab) {
+    final showCoins =
+        hab.dogs.isNotEmpty && hab.readyToCollect && hab.coinsAccumulated > 0;
+    final showFood =
+        hab.readyToCollectDogfood && hab.dogfoodAccumulated > 0;
+    if (!showCoins && !showFood) return const [];
+
+    final corners = getHabitatCorners(hab.col, hab.row, hab.sizeW, hab.sizeH);
+    final footprintW = corners.pRight.dx - corners.pLeft.dx;
+    final imgW = footprintW * 1.08;
+    final imgH = imgW * 0.666;
+    final imgX = corners.center.dx - imgW / 2;
+    final imgY = corners.pBottom.dy - imgH * 0.90;
+    const double bubbleSize = 56.0;
+
+    return [
+      if (showCoins)
+        _buildSingleCollectionBubble(
+          left: imgX + (imgW - bubbleSize) / 2,
+          baseTop: imgY - 36,
+          bubbleSize: bubbleSize,
+          iconAsset: 'assets/ui/coins.png',
+          iconTop: 13,
+          iconSize: 28,
+          tooltip: 'Collect ${hab.coinsAccumulated} Paw Coins!',
+          onTap: () => widget.onCollectCoins(hab.id),
+        ),
+      if (showFood)
+        _buildSingleCollectionBubble(
+          left: imgX + (imgW - bubbleSize) / 2,
+          baseTop: imgY - 36,
+          bubbleSize: bubbleSize,
+          iconAsset: 'assets/ui/dogfood.png',
+          iconTop: 14,
+          iconSize: 26,
+          tooltip: 'Collect ${hab.dogfoodAccumulated} Kibble!',
+          onTap: () => widget.onCollectDogfood(hab.id),
+        ),
+    ];
+  }
+
+  Widget _buildSingleCollectionBubble({
+    required double left,
+    required double baseTop,
+    required double bubbleSize,
+    required String iconAsset,
+    required double iconTop,
+    required double iconSize,
+    required String tooltip,
+    required VoidCallback onTap,
+  }) {
+    return AnimatedBuilder(
+      animation: _bounceController,
+      builder: (_, __) {
+        final floatY = _bounceController.value * 8;
+        final pulseScale = 1.0 + 0.045 * sin(_bounceController.value * pi);
+        return Positioned(
+          top: baseTop - floatY,
+          left: left,
+          width: bubbleSize,
+          height: bubbleSize,
+          child: Transform.scale(
+            scale: pulseScale,
+            child: HoverScale(
+            scale: 1.15,
+            behavior: HitTestBehavior.opaque,
+            onTap: onTap,
+            tooltip: tooltip,
+            child: SizedBox(
+              width: bubbleSize,
+              height: bubbleSize,
+              child: Stack(
+                alignment: Alignment.topCenter,
+                children: [
+                  Image.asset(
+                    'assets/ui/CollectPlaceHolder.png',
+                    width: bubbleSize,
+                    height: bubbleSize,
+                    fit: BoxFit.contain,
+                    filterQuality: FilterQuality.high,
+                  ),
+                  Positioned(
+                    top: iconTop,
+                    child: Image.asset(
+                      iconAsset,
+                      width: iconSize,
+                      height: iconSize,
+                      fit: BoxFit.contain,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -1060,7 +1173,14 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
   Widget _buildObstacleWidget(ObstacleModel obs, bool isPlacingMode) {
     final corners = getHabitatCorners(obs.col, obs.row, obs.sizeW, obs.sizeH);
     final footprintW = corners.pRight.dx - corners.pLeft.dx;
-    final double scaleMultiplier = obs.sizeW == 1 ? 1.55 : 1.25;
+    double scaleMultiplier = obs.sizeW == 1 ? 1.55 : 1.25;
+    if (obs.imageAsset.contains('IcePineTree')) {
+      scaleMultiplier = 2.05;
+    } else if (obs.imageAsset.contains('IceSpikeRock')) {
+      scaleMultiplier = 0.95;
+    } else if (obs.imageAsset.contains('LegendaryPillar')) {
+      scaleMultiplier = 1.95;
+    }
     final double aspect = obs.type == 'tree'
         ? (1199.0 / 1312.0)
         : (obs.type == 'tree_rock' ? (1145.0 / 1374.0) : (1024.0 / 1536.0));
@@ -1072,10 +1192,13 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
     final isSelected = obs.id == widget.selectedObstacleId;
     final isClearing = obs.isClearing;
 
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
     final remainingSeconds = isClearing
-        ? max(0, (((obs.clearingEndsAt ?? 0) - _now) / 1000).ceil())
+        ? max(0, (((obs.clearingEndsAt ?? 0) - nowMs) / 1000).ceil())
+            .clamp(0, max(1, obs.clearDuration))
         : 0;
-    final isClearingFinished = isClearing && remainingSeconds == 0;
+    final isClearingFinished =
+        isClearing && (obs.clearingEndsAt ?? 0) <= nowMs;
     final progress = isClearing
         ? (1.0 - (remainingSeconds / max(1, obs.clearDuration))).clamp(0.0, 1.0)
         : 0.0;
@@ -1129,13 +1252,42 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
             // ── Obstacle Artwork ──
             Opacity(
               opacity: isLockedLot ? 0.55 : 1.0,
-              child: Image.asset(
-                obs.imageAsset,
-                width: imgW,
-                height: imgH,
-                fit: BoxFit.contain,
-                filterQuality: FilterQuality.high,
-              ),
+              child: ((obs.type == 'tree' || obs.type == 'tree_rock') &&
+                      !obs.imageAsset.contains('Legendary'))
+                  ? RepaintBoundary(
+                      child: AnimatedBuilder(
+                        animation: _ambientController,
+                        builder: (_, inner) {
+                          final angle = sin(
+                                _ambientController.value * 2 * pi +
+                                    obs.col * 0.9 +
+                                    obs.row * 0.7,
+                              ) *
+                              0.026;
+                          return Transform.rotate(
+                            alignment: Alignment.bottomCenter,
+                            angle: angle,
+                            child: inner,
+                          );
+                        },
+                        child: Image.asset(
+                          obs.imageAsset,
+                          width: imgW,
+                          height: imgH,
+                          fit: BoxFit.contain,
+                          cacheWidth: 256,
+                          filterQuality: FilterQuality.medium,
+                        ),
+                      ),
+                    )
+                  : Image.asset(
+                      obs.imageAsset,
+                      width: imgW,
+                      height: imgH,
+                      fit: BoxFit.contain,
+                      cacheWidth: 256,
+                      filterQuality: FilterQuality.medium,
+                    ),
             ),
 
             // ── Clearing Timer & Progress Bar (Real-time countdown) ──
@@ -1274,24 +1426,68 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
     );
   }
 
+  Widget _buildVanishingObstacleWidget(ObstacleModel obs) {
+    final corners = getHabitatCorners(obs.col, obs.row, obs.sizeW, obs.sizeH);
+    final footprintW = corners.pRight.dx - corners.pLeft.dx;
+    double scaleMultiplier = obs.sizeW == 1 ? 1.55 : 1.25;
+    if (obs.imageAsset.contains('IcePineTree')) {
+      scaleMultiplier = 2.05;
+    } else if (obs.imageAsset.contains('IceSpikeRock')) {
+      scaleMultiplier = 0.95;
+    } else if (obs.imageAsset.contains('LegendaryPillar')) {
+      scaleMultiplier = 1.95;
+    }
+    final double aspect = obs.type == 'tree'
+        ? (1199.0 / 1312.0)
+        : (obs.type == 'tree_rock' ? (1145.0 / 1374.0) : (1024.0 / 1536.0));
+    final imgW = footprintW * scaleMultiplier;
+    final imgH = imgW * aspect;
+    final imgX = corners.center.dx - imgW / 2;
+    final imgY = corners.pBottom.dy - imgH * 0.88;
+
+    return Positioned(
+      key: ValueKey('vanish_${obs.id}'),
+      left: imgX,
+      top: imgY,
+      width: imgW,
+      height: imgH,
+      child: IgnorePointer(
+        child: _VanishingObstacleEffect(
+          imageAsset: obs.imageAsset,
+          width: imgW,
+          height: imgH,
+          onDone: () {
+            if (mounted) {
+              setState(() {
+                _vanishingObstacles.removeWhere((v) => v.id == obs.id);
+              });
+            }
+          },
+        ),
+      ),
+    );
+  }
+
   Widget _buildForSaleSign({
     required int lotNumber,
     required int col,
     required int row,
   }) {
     final corners = getHabitatCorners(col, row, 2, 2);
-    const imgW = 135.0;
-    const imgH = 95.0;
+    const imgW = 140.0;
+    const imgH = 112.0;
     final imgX = corners.center.dx - imgW / 2;
-    final imgY = corners.center.dy - imgH * 0.75;
+    final imgY = corners.center.dy - imgH * 0.78;
 
     return Positioned(
       left: imgX,
       top: imgY,
       width: imgW,
       height: imgH,
-      child: GestureDetector(
+      child: HoverScale(
+        scale: 1.08,
         behavior: HitTestBehavior.opaque,
+        tooltip: 'Tap to unlock Expansion Lot $lotNumber!',
         onTap: () {
           if (widget.onUnlockLot != null) {
             widget.onUnlockLot!(lotNumber);
@@ -1299,40 +1495,92 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
             widget.onUnlockLotExpansion?.call();
           }
         },
-        child: SizedBox(
-          width: imgW,
-          height: imgH,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              // Ground shadow
-              Positioned(
-                bottom: 4,
-                width: 75,
-                height: 18,
-                child: Container(
-                  decoration: const BoxDecoration(
-                    borderRadius: BorderRadius.all(Radius.elliptical(75, 18)),
-                    gradient: RadialGradient(
-                      colors: [Color(0x99000000), Colors.transparent],
-                    ),
+        child: Stack(
+          alignment: Alignment.center,
+          clipBehavior: Clip.none,
+          children: [
+            // Soft ground shadow
+            Positioned(
+              bottom: 6,
+              width: 72,
+              height: 16,
+              child: Container(
+                decoration: const BoxDecoration(
+                  borderRadius: BorderRadius.all(
+                    Radius.elliptical(72, 16),
+                  ),
+                  gradient: RadialGradient(
+                    colors: [Color(0x77000000), Colors.transparent],
                   ),
                 ),
               ),
-              // Lot For Sale Asset Graphic — static, no bounce
-              Positioned(
-                bottom: 8,
-                width: 135,
-                height: 95,
-                child: Image.asset(
-                  'assets/ui/LotForSale.png',
-                  width: 135,
-                  height: 95,
-                  fit: BoxFit.contain,
-                ),
+            ),
+            // Static For Sale sign + Unlock pill
+            Positioned(
+              bottom: 10,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Image.asset(
+                    'assets/ui/LotForSale.png',
+                    width: 124,
+                    height: 82,
+                    fit: BoxFit.contain,
+                    filterQuality: FilterQuality.high,
+                  ),
+                  Transform.translate(
+                    offset: const Offset(0, -6),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFFDE68A), Color(0xFFF59E0B)],
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: const Color(0xFF451A03),
+                          width: 1.5,
+                        ),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0x66000000),
+                            blurRadius: 4,
+                            offset: Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.lock_open_rounded,
+                            size: 11,
+                            color: Color(0xFF451A03),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'LOT $lotNumber',
+                            style: const TextStyle(
+                              fontFamily: 'Lilita One',
+                              fontSize: 10.5,
+                              color: Color(0xFF451A03),
+                              letterSpacing: 0.6,
+                              height: 1.0,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -1658,24 +1906,49 @@ class _LockedLotTerritoryPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final shadowPaint = Paint()
-      ..color = const Color(0x44000000)
+    // Soft dreamy mist veil instead of harsh dark blocking
+    final mistPaint = Paint()
+      ..color = const Color(0x36E0F2FE)
       ..style = PaintingStyle.fill;
 
-    final boundaryPaint = Paint()
-      ..color = const Color(0xCCFBBF24)
+    final fenceShadowPaint = Paint()
+      ..color = const Color(0x66000000)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.8;
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = 3.2;
 
-    // 1. Shaded mystery tint over locked tiles
-    // Unlocked: r >= 11 (entire bottom strip). Lot 1 = c < 13 & r < 11, Lot 2 = c >= 13 & r < 11
+    final chainOutlinePaint = Paint()
+      ..color = const Color(0xFF1E293B)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.6;
+
+    final chainLinkPaint = Paint()
+      ..color = const Color(0xFFCBD5E1)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.4;
+
+    final chainBridgePaint = Paint()
+      ..color = const Color(0xFF94A3B8)
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = 1.8;
+
+    final postFillPaint = Paint()
+      ..color = const Color(0xFF475569)
+      ..style = PaintingStyle.fill;
+
+    final postCapPaint = Paint()
+      ..color = const Color(0xFFE2E8F0)
+      ..style = PaintingStyle.fill;
+
+    // 1. Soft sunlit mist over locked tiles
     for (int c = 0; c < gridCols; c++) {
       for (int r = 0; r < gridRows; r++) {
         if (!isTileBuildable(c, r)) continue;
 
         final isLocked =
             (c < 13 && r < 11 && !isLot1Unlocked) ||
-            (c >= 13 && r < 11 && !isLot2Unlocked); // Only top-right is Lot 2
+            (c >= 13 && r < 11 && !isLot2Unlocked);
         if (!isLocked) continue;
 
         final cx = originX + (c - r) * (tileW / 2);
@@ -1692,11 +1965,57 @@ class _LockedLotTerritoryPainter extends CustomPainter {
           ..lineTo(pLeft.dx, pLeft.dy)
           ..close();
 
-        canvas.drawPath(tilePath, shadowPaint);
+        canvas.drawPath(tilePath, mistPaint);
       }
     }
 
-    // 2. Boundary line along row = 11 (only for segments whose lot is still locked)
+    void drawChainSegment(Offset a, Offset b, bool drawPost) {
+      final delta = b - a;
+      final angle = atan2(delta.dy, delta.dx);
+      const linkCount = 4;
+
+      for (int i = 0; i < linkCount; i++) {
+        final t = (i + 0.5) / linkCount;
+        final center = Offset.lerp(a, b, t)!;
+
+        canvas.save();
+        canvas.translate(center.dx, center.dy);
+        canvas.rotate(angle);
+
+        if (i.isEven) {
+          // Flat oval chain link
+          final rect = Rect.fromCenter(
+            center: Offset.zero,
+            width: 8.5,
+            height: 4.4,
+          );
+          final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(2.2));
+          canvas.drawRRect(rrect.shift(const Offset(0, 1.2)), fenceShadowPaint);
+          canvas.drawRRect(rrect, chainOutlinePaint);
+          canvas.drawRRect(rrect, chainLinkPaint);
+        } else {
+          // Edge-on interlocking link
+          const p1 = Offset(-3.6, 0);
+          const p2 = Offset(3.6, 0);
+          canvas.drawLine(
+            p1.translate(0, 1.2),
+            p2.translate(0, 1.2),
+            fenceShadowPaint,
+          );
+          canvas.drawLine(p1, p2, chainOutlinePaint);
+          canvas.drawLine(p1, p2, chainBridgePaint);
+        }
+        canvas.restore();
+      }
+
+      if (drawPost) {
+        canvas.drawCircle(a.translate(0, 1.2), 3.8, fenceShadowPaint);
+        canvas.drawCircle(a, 3.3, postFillPaint);
+        canvas.drawCircle(a, 1.5, postCapPaint);
+      }
+    }
+
+    // 2. Chain-and-post boundary along row = 11
     if (!isLot1Unlocked || !isLot2Unlocked) {
       for (int c = 0; c < gridCols; c++) {
         final segmentLocked =
@@ -1706,12 +2025,12 @@ class _LockedLotTerritoryPainter extends CustomPainter {
           final cy = originY + (c + 11) * (tileH / 2);
           final pTop = Offset(cx, cy - tileH / 2);
           final pRight = Offset(cx + tileW / 2, cy);
-          canvas.drawLine(pTop, pRight, boundaryPaint);
+          drawChainSegment(pTop, pRight, c % 2 == 0);
         }
       }
     }
 
-    // 3. Dividing boundary line along col = 13, only for r < 11 (separates Lot 1 from Lot 2 in top region)
+    // 3. Dividing chain-and-post boundary along col = 13 (r < 11)
     if (!isLot1Unlocked || !isLot2Unlocked) {
       for (int r = 0; r < 11; r++) {
         if (isTileBuildable(13, r)) {
@@ -1719,7 +2038,7 @@ class _LockedLotTerritoryPainter extends CustomPainter {
           final cy = originY + (13 + r) * (tileH / 2);
           final pTop = Offset(cx, cy - tileH / 2);
           final pLeft = Offset(cx - tileW / 2, cy);
-          canvas.drawLine(pTop, pLeft, boundaryPaint);
+          drawChainSegment(pTop, pLeft, r % 2 == 0);
         }
       }
     }
@@ -1729,4 +2048,126 @@ class _LockedLotTerritoryPainter extends CustomPainter {
   bool shouldRepaint(covariant _LockedLotTerritoryPainter oldDelegate) =>
       oldDelegate.isLot1Unlocked != isLot1Unlocked ||
       oldDelegate.isLot2Unlocked != isLot2Unlocked;
+}
+
+class _VanishingObstacleEffect extends StatefulWidget {
+  final String imageAsset;
+  final double width;
+  final double height;
+  final VoidCallback onDone;
+
+  const _VanishingObstacleEffect({
+    required this.imageAsset,
+    required this.width,
+    required this.height,
+    required this.onDone,
+  });
+
+  @override
+  State<_VanishingObstacleEffect> createState() =>
+      _VanishingObstacleEffectState();
+}
+
+class _VanishingObstacleEffectState extends State<_VanishingObstacleEffect>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 650),
+    )..addStatusListener((status) {
+        if (status == AnimationStatus.completed) {
+          widget.onDone();
+        }
+      });
+    _controller.forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (_, child) {
+        final t = _controller.value;
+        // Brief pop-up then shrink to 0
+        final scale = t < 0.2
+            ? 1.0 + (t / 0.2) * 0.14
+            : (1.14 * (1.0 - ((t - 0.2) / 0.8))).clamp(0.0, 1.2);
+        final opacity = (1.0 - Curves.easeIn.transform(t)).clamp(0.0, 1.0);
+
+        return Stack(
+          clipBehavior: Clip.none,
+          alignment: Alignment.center,
+          children: [
+            // Shrinking & fading obstacle
+            Opacity(
+              opacity: opacity,
+              child: Transform.scale(
+                alignment: Alignment.bottomCenter,
+                scale: scale,
+                child: child,
+              ),
+            ),
+
+            // Dust poof puffs
+            for (int i = 0; i < 4; i++)
+              Transform.translate(
+                offset: Offset(
+                  cos(i * pi / 2 + 0.4) * t * 34.0,
+                  sin(i * pi / 2 + 0.4) * t * 18.0 - t * 14.0,
+                ),
+                child: Opacity(
+                  opacity: (1.0 - t).clamp(0.0, 1.0) * 0.7,
+                  child: Container(
+                    width: 18 * (1.0 - t * 0.5),
+                    height: 18 * (1.0 - t * 0.5),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFFEF3C7),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
+              ),
+
+            // Sparkle stars
+            for (int i = 0; i < 6; i++)
+              Transform.translate(
+                offset: Offset(
+                  cos(i * pi / 3) * t * 42.0,
+                  sin(i * pi / 3) * t * 28.0 - t * 22.0,
+                ),
+                child: Opacity(
+                  opacity: (1.0 - t).clamp(0.0, 1.0),
+                  child: Transform.rotate(
+                    angle: t * 4.5,
+                    child: const Icon(
+                      Icons.star_rounded,
+                      color: Color(0xFFFDE047),
+                      size: 18,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+      child: Image.asset(
+        widget.imageAsset,
+        width: widget.width,
+        height: widget.height,
+        fit: BoxFit.contain,
+        cacheWidth: 256,
+        filterQuality: FilterQuality.medium,
+      ),
+    );
+  }
 }

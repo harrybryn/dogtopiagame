@@ -11,7 +11,7 @@ class SkyBackground extends StatefulWidget {
   /// Child widget rendered on top of all background layers.
   final Widget? child;
 
-  /// Duration for one full cloud scroll cycle. Defaults to 60 seconds.
+  /// Duration for one full cloud scroll cycle. Defaults to 110 seconds.
   final Duration cloudCycleDuration;
 
   /// Whether to show the land surface layer. Defaults to true.
@@ -22,11 +22,11 @@ class SkyBackground extends StatefulWidget {
   final double landHeightFraction;
 
   /// How much of the screen height the cloud band occupies (0.0–1.0).
-  /// Defaults to 0.35.
+  /// Defaults to 0.80.
   final double cloudHeightFraction;
 
   /// Vertical position of the cloud band's top edge as a fraction of screen
-  /// height (0.0 = top, 1.0 = bottom). Defaults to 0.10.
+  /// height (0.0 = top, 1.0 = bottom). Defaults to -0.05.
   final double cloudTopFraction;
 
   /// Optional scale applied to the animated cloud layer (e.g. when zooming
@@ -39,11 +39,11 @@ class SkyBackground extends StatefulWidget {
   const SkyBackground({
     super.key,
     this.child,
-    this.cloudCycleDuration = const Duration(seconds: 60),
+    this.cloudCycleDuration = const Duration(seconds: 110),
     this.showLand = true,
     this.landHeightFraction = 0.45,
-    this.cloudHeightFraction = 0.35,
-    this.cloudTopFraction = 0.10,
+    this.cloudHeightFraction = 0.80,
+    this.cloudTopFraction = -0.05,
     this.cloudScale = 1.0,
     this.cloudOffset = Offset.zero,
   });
@@ -99,17 +99,19 @@ class _SkyBackgroundState extends State<SkyBackground>
           right: -800,
           top: MediaQuery.of(context).size.height * widget.cloudTopFraction,
           height: MediaQuery.of(context).size.height * widget.cloudHeightFraction,
-          child: Transform.translate(
-            offset: widget.cloudOffset,
-            child: Transform.scale(
-              scale: widget.cloudScale,
-              child: AnimatedBuilder(
-                animation: _cloudController,
-                builder: (context, child) {
-                  return _SlidingClouds(
-                    progress: _cloudController.value,
-                  );
-                },
+          child: RepaintBoundary(
+            child: Transform.translate(
+              offset: widget.cloudOffset,
+              child: Transform.scale(
+                scale: widget.cloudScale,
+                child: AnimatedBuilder(
+                  animation: _cloudController,
+                  builder: (context, child) {
+                    return _SlidingClouds(
+                      progress: _cloudController.value,
+                    );
+                  },
+                ),
               ),
             ),
           ),
@@ -193,6 +195,7 @@ class _SlidingClouds extends StatelessWidget {
     final image = Image.asset(
       'assets/ui/Cartoon Cloud Sprite Sheet.png',
       fit: BoxFit.fill,
+      cacheWidth: 1086,
       filterQuality: FilterQuality.medium,
     );
     return SizedBox(

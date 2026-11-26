@@ -60,7 +60,7 @@ class MockFriend {
   List<ObstacleModel> obstaclesForIsland(String islandId) =>
       obstaclesByIsland.putIfAbsent(
         islandId,
-        () => ObstacleModel.defaultObstacles(),
+        () => ObstacleModel.defaultObstaclesForIsland(islandId),
       );
 
   String habitatAsset(HabitatModel habitat) {

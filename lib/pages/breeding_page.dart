@@ -1,9 +1,26 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../state/game_controller.dart';
+import '../components/common/generic_modal.dart';
+import '../components/common/hover_scale.dart';
+import '../models/dog_evolution.dart';
+import '../models/dog_model.dart';
 import '../services/audio_service.dart';
+import '../state/game_controller.dart';
 
-class BreedingPage extends StatefulWidget {
+/// Minimum dog level required for breeding (Young Pup stage or Adult).
+const int minBreedingLevel = 4;
+
+class BreedingDialog extends StatefulWidget {
+  final GameController game;
+  final VoidCallback? onClose;
+
+  const BreedingDialog({super.key, required this.game, this.onClose});
+
+  @override
+  State<BreedingDialog> createState() => _BreedingDialogState();
+}
+
+class BreedingPage extends StatelessWidget {
   final GameController game;
   final VoidCallback onBackToWorld;
 
@@ -14,71 +31,112 @@ class BreedingPage extends StatefulWidget {
   });
 
   @override
-  State<BreedingPage> createState() => _BreedingPageState();
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF120601),
+      body: BreedingDialog(game: game, onClose: onBackToWorld),
+    );
+  }
 }
 
-class _BreedingPageState extends State<BreedingPage> {
-  String _parent1 = 'Basenji';
-  String _parent2 = 'Pharaoh Hound';
+class _BreedingDialogState extends State<BreedingDialog> {
+  String? _parent1Id;
+  String? _parent2Id;
   String _breedingState = 'idle'; // 'idle' | 'breeding' | 'hatched'
   Map<String, String>? _hatchedPup;
+  Timer? _breedTimer;
 
-  final List<Map<String, String>> _parentOptions = const [
-    {'name': 'Basenji', 'trait': 'Agile & Alert', 'element': 'Desert Element'},
-    {'name': 'Pharaoh Hound', 'trait': 'Royal Sight', 'element': 'Desert Element'},
-    {'name': 'Shiba Inu', 'trait': 'Spirited Loyal', 'element': 'Garden Element'},
-    {'name': 'Husky', 'trait': 'Arctic Endurance', 'element': 'Snow Element'},
-  ];
+  List<DogModel> get _allOwnedDogs =>
+      widget.game.currentIslandHabitats.expand((h) => h.dogs).toList();
 
-  void _startBreeding() {
-    if (widget.game.coins < 500) {
-      SoundManager.instance.playSadWhimper();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          behavior: SnackBarBehavior.floating,
-          margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-          padding: EdgeInsets.zero,
-          content: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFFB91C1C), Color(0xFF7F1D1D)],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-              ),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFFFCA5A5), width: 1.8),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x88000000),
-                  blurRadius: 12,
-                  offset: Offset(0, 4),
-                ),
-              ],
+  List<DogModel> get _eligibleDogs =>
+      _allOwnedDogs.where((d) => d.level >= minBreedingLevel).toList();
+
+  @override
+  void dispose() {
+    _breedTimer?.cancel();
+    super.dispose();
+  }
+
+  void _showErrorSnack(String message) {
+    SoundManager.instance.playSadWhimper();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        padding: EdgeInsets.zero,
+        content: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFFB91C1C), Color(0xFF7F1D1D)],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
             ),
-            child: const Row(
-              children: [
-                Icon(Icons.warning_amber_rounded,
-                    color: Color(0xFFFEF08A), size: 20),
-                SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'You need 500 Paw Coins to breed!',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontFamily: 'Fredoka',
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13.5,
-                    ),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFFCA5A5), width: 1.8),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x88000000),
+                blurRadius: 12,
+                offset: Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.warning_amber_rounded,
+                color: Color(0xFFFEF08A),
+                size: 20,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  message,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontFamily: 'Fredoka',
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13.5,
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
+      ),
+    );
+  }
+
+  void _startBreeding(DogModel? p1, DogModel? p2) {
+    if (p1 == null || p2 == null) {
+      _showErrorSnack(
+        'Select two Level $minBreedingLevel+ dogs of the same breed!',
       );
+      return;
+    }
+    if (p1.level < minBreedingLevel || p2.level < minBreedingLevel) {
+      _showErrorSnack(
+        'Both dogs must be at least Level $minBreedingLevel (Young Pup or Adult)!',
+      );
+      return;
+    }
+    if (DogStageInfo.getBreedPrefix(p1.breedId) !=
+        DogStageInfo.getBreedPrefix(p2.breedId)) {
+      _showErrorSnack('Only dogs of the same breed can be paired!');
+      return;
+    }
+    if (!widget.game.hasHabitatSpace) {
+      _showErrorSnack(
+        'All habitats are full (max 4 dogs each). Make room first!',
+      );
+      return;
+    }
+    if (widget.game.coins < 500) {
+      _showErrorSnack('You need 500 Paw Coins to breed!');
       return;
     }
 
@@ -89,17 +147,35 @@ class _BreedingPageState extends State<BreedingPage> {
       SoundManager.instance.playBake();
     });
 
-    Timer(const Duration(milliseconds: 2800), () {
+    _breedTimer?.cancel();
+    _breedTimer = Timer(const Duration(milliseconds: 2800), () {
       if (!mounted) return;
+      final breedName = DogStageInfo.getBreedDisplayName(p1.breedId);
+      final placedHabitat = widget.game.addBredPuppy(p1.breedId, p1.element);
+      final previewPup = DogModel(
+        id: 'preview',
+        breedId: p1.breedId,
+        name: breedName,
+        level: 1,
+        feedProgress: 0,
+        stage: 'Puppy',
+        element: p1.element,
+        habitatId: '',
+        habitatName: '',
+      );
+      final pupImg = DogStageInfo.getInfo(previewPup).sitImg;
+
       setState(() {
         _breedingState = 'hatched';
         SoundManager.instance.playLevelUp();
         SoundManager.instance.playDogBark(isPuppy: true, force: true);
         _hatchedPup = {
-          'name': 'Sun Chaser Pup',
-          'desc':
-              'Rare hybrid offspring of $_parent1 & $_parent2! Inherited Golden Coat & Speed.',
-          'rarity': 'Rare Hybrid',
+          'name': 'Purebred $breedName Pup',
+          'img': pupImg,
+          'rarity': 'Same-Breed Offspring',
+          'desc': placedHabitat != null
+              ? 'Born from ${p1.name} & ${p2.name}! Sent to $placedHabitat.'
+              : 'Born from ${p1.name} & ${p2.name}!',
         };
       });
     });
@@ -107,92 +183,274 @@ class _BreedingPageState extends State<BreedingPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF120601),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+    final allDogs = _allOwnedDogs;
+    final eligible = _eligibleDogs;
+    final DogModel? parent1 = eligible.isEmpty
+        ? null
+        : eligible.firstWhere(
+            (d) => d.id == _parent1Id,
+            orElse: () => eligible.first,
+          );
+    final String? p1Prefix = parent1 != null
+        ? DogStageInfo.getBreedPrefix(parent1.breedId)
+        : null;
+    final List<DogModel> compatiblePartners = parent1 == null
+        ? const []
+        : eligible
+              .where(
+                (d) =>
+                    d.id != parent1.id &&
+                    DogStageInfo.getBreedPrefix(d.breedId) == p1Prefix,
+              )
+              .toList();
+    final DogModel? parent2 = compatiblePartners.isEmpty
+        ? null
+        : compatiblePartners.firstWhere(
+            (d) => d.id == _parent2Id,
+            orElse: () => compatiblePartners.first,
+          );
+    final bool canBreed = parent1 != null && parent2 != null;
+
+    final content = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Top info banner + Coin Pill
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFFBEB),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFF59E0B), width: 1.5),
+          ),
+          child: Row(
             children: [
-              // Header Row
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  ElevatedButton.icon(
-                    onPressed: widget.onBackToWorld,
-                    icon: const Icon(Icons.arrow_back, size: 18),
-                    label: const Text('Back to Island View',
-                        style: TextStyle(fontWeight: FontWeight.bold)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xDD2A1106),
-                      foregroundColor: const Color(0xFFFEF3C7),
-                      side: const BorderSide(color: Color(0xFFD97706), width: 1.5),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 10),
-                    ),
-                  ),
-
-                  // Coins
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: const Color(0xEE2A1106),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.amber),
-                    ),
-                    child: Row(
-                      children: [
-                        Image.asset('assets/ui/coins.png', width: 18, height: 18),
-                        const SizedBox(width: 6),
-                        Text(
-                          '${widget.game.coins}',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+              Image.asset(
+                'assets/itemsInShop/building/BreedingDen.webp',
+                width: 34,
+                height: 34,
               ),
-
-              const SizedBox(height: 24),
-
-              // Title Card
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Same-Breed Purebred Pairing',
+                      style: TextStyle(
+                        fontFamily: 'Lilita One',
+                        fontSize: 13.5,
+                        color: Color(0xFF451A03),
+                      ),
+                    ),
+                    Text(
+                      'Uses dogs on this island • Level $minBreedingLevel+ required',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Color(0xFF78350F),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
               Container(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF2A1005),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: const Color(0xFFD97706), width: 2),
+                  color: const Color(0xFF3B1404),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: const Color(0xFFFBBF24),
+                    width: 1.2,
+                  ),
                 ),
                 child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Image.asset('assets/itemsInShop/building/BreedingDen.webp',
-                        width: 50, height: 50),
-                    const SizedBox(width: 14),
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                    Image.asset('assets/ui/coins.png', width: 14, height: 14),
+                    const SizedBox(width: 4),
+                    Text(
+                      GameController.formatCoins(widget.game.coins),
+                      style: const TextStyle(
+                        fontFamily: 'Lilita One',
+                        fontSize: 12,
+                        color: Color(0xFFFEF08A),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 10),
+
+        if (_breedingState == 'idle') ...[
+          // Parent cards row
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _buildParentCard(
+                  label: 'PARENT 1',
+                  selectedDog: parent1,
+                  options: eligible,
+                  emptyText: allDogs.isEmpty
+                      ? 'No dogs on this island'
+                      : 'No Level $minBreedingLevel+ dogs yet',
+                  onChanged: (id) => setState(() {
+                    _parent1Id = id;
+                    _parent2Id = null;
+                  }),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(top: 52, left: 6, right: 6),
+                child: Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFF472B6), Color(0xFFDB2777)],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                    ),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 2),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x44000000),
+                        blurRadius: 6,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.favorite_rounded,
+                    color: Colors.white,
+                    size: 18,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: _buildParentCard(
+                  label: 'PARENT 2',
+                  selectedDog: parent2,
+                  options: compatiblePartners,
+                  emptyText: parent1 == null
+                      ? 'Need Level $minBreedingLevel+ Parent 1'
+                      : 'Need another Lv $minBreedingLevel+ ${DogStageInfo.getBreedDisplayName(parent1.breedId)}',
+                  onChanged: (id) => setState(() => _parent2Id = id),
+                ),
+              ),
+            ],
+          ),
+
+          if (!canBreed) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF3C7),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFD97706)),
+              ),
+              child: Text(
+                parent1 == null
+                    ? 'Raise at least two same-breed dogs on this island to Level $minBreedingLevel+ (Young Pup)!'
+                    : 'Adopt or raise a second ${DogStageInfo.getBreedDisplayName(parent1.breedId)} on this island to Level $minBreedingLevel+.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Color(0xFF78350F),
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+
+          const SizedBox(height: 12),
+
+          Center(
+            child: HoverScale(
+              scale: canBreed ? 1.05 : 1.0,
+              onTap: canBreed ? () => _startBreeding(parent1, parent2) : null,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: canBreed
+                        ? const [Color(0xFFF472B6), Color(0xFFDB2777)]
+                        : const [Color(0xFF9CA3AF), Color(0xFF6B7280)],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                  ),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                    color: canBreed
+                        ? const Color(0xFFFBCFE8)
+                        : const Color(0xFFD1D5DB),
+                    width: 2,
+                  ),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x44000000),
+                      blurRadius: 8,
+                      offset: Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.favorite_rounded,
+                      color: Colors.white,
+                      size: 17,
+                    ),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'START BREEDING',
+                      style: TextStyle(
+                        fontFamily: 'Lilita One',
+                        fontSize: 14,
+                        color: Colors.white,
+                        letterSpacing: 0.6,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0x33000000),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(
-                            'Ancient Breeding Den',
-                            style: TextStyle(
-                              color: Color(0xFFFEF08A),
-                              fontSize: 18,
-                              fontWeight: FontWeight.w900,
-                            ),
+                          Image.asset(
+                            'assets/ui/coins.png',
+                            width: 13,
+                            height: 13,
                           ),
-                          SizedBox(height: 4),
-                          Text(
-                            'Pair two champion dogs to unlock mythical hybrid breeds and puppy traits!',
-                            style: TextStyle(color: Colors.white70, fontSize: 12),
+                          const SizedBox(width: 4),
+                          const Text(
+                            '500',
+                            style: TextStyle(
+                              fontFamily: 'Lilita One',
+                              fontSize: 12.5,
+                              color: Color(0xFFFEF08A),
+                            ),
                           ),
                         ],
                       ),
@@ -200,189 +458,305 @@ class _BreedingPageState extends State<BreedingPage> {
                   ],
                 ),
               ),
-
-              const SizedBox(height: 24),
-
-              // Parents Selection Cards
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildParentSelector(
-                      'Parent 1',
-                      _parent1,
-                      (val) => setState(() => _parent1 = val),
-                    ),
-                  ),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 10),
-                    child: Icon(Icons.favorite, color: Colors.pinkAccent, size: 32),
-                  ),
-                  Expanded(
-                    child: _buildParentSelector(
-                      'Parent 2',
-                      _parent2,
-                      (val) => setState(() => _parent2 = val),
-                    ),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 32),
-
-              // Breeding Action & Hatching Area
-              if (_breedingState == 'idle')
-                Center(
-                  child: ElevatedButton.icon(
-                    onPressed: _startBreeding,
-                    icon: const Icon(Icons.favorite),
-                    label: const Text('START BREEDING (500 Paw Coins)'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFEC4899),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 32, vertical: 16),
-                      textStyle: const TextStyle(
-                          fontSize: 15, fontWeight: FontWeight.bold),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      elevation: 8,
-                    ),
-                  ),
-                )
-              else if (_breedingState == 'breeding')
-                Column(
-                  children: [
-                    const SizedBox(
-                      width: 50,
-                      height: 50,
-                      child: CircularProgressIndicator(
-                        color: Colors.pinkAccent,
-                        strokeWidth: 4,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Breeding in progress... Incubating mystery egg!',
-                      style: TextStyle(
-                        color: Colors.amber,
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                )
-              else if (_breedingState == 'hatched' && _hatchedPup != null)
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF381503),
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: Colors.amber, width: 2.5),
-                  ),
-                  child: Column(
-                    children: [
-                      const Text(
-                        'EGG HATCHED!',
-                        style: TextStyle(
-                          color: Color(0xFFFBBF24),
-                          fontSize: 20,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 2,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Image.asset('assets/dogs/BulldogPuppySit.png',
-                          width: 100, height: 100),
-                      const SizedBox(height: 10),
-                      Text(
-                        _hatchedPup!['name']!,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _hatchedPup!['rarity']!,
-                        style: const TextStyle(
-                          color: Colors.pinkAccent,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        _hatchedPup!['desc']!,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(color: Colors.white70, fontSize: 13),
-                      ),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                        onPressed: () {
-                          setState(() {
-                            _breedingState = 'idle';
-                            _hatchedPup = null;
-                          });
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.amber,
-                          foregroundColor: const Color(0xFF451A03),
-                        ),
-                        child: const Text('BREED ANOTHER',
-                            style: TextStyle(fontWeight: FontWeight.bold)),
-                      ),
-                    ],
+            ),
+          ),
+        ] else if (_breedingState == 'breeding') ...[
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFFBEB),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: const Color(0xFFF59E0B), width: 1.5),
+            ),
+            child: Column(
+              children: [
+                Image.asset(
+                  'assets/itemsInShop/building/BreedingDen.webp',
+                  width: 64,
+                  height: 64,
+                ),
+                const SizedBox(height: 10),
+                const SizedBox(
+                  width: 34,
+                  height: 34,
+                  child: CircularProgressIndicator(
+                    color: Color(0xFFDB2777),
+                    strokeWidth: 4,
                   ),
                 ),
-            ],
+                const SizedBox(height: 10),
+                const Text(
+                  'Incubating Purebred Puppy...',
+                  style: TextStyle(
+                    fontFamily: 'Lilita One',
+                    color: Color(0xFF78350F),
+                    fontSize: 15,
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
+        ] else if (_breedingState == 'hatched' && _hatchedPup != null) ...[
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFFBEB),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: const Color(0xFFF59E0B), width: 2),
+            ),
+            child: Column(
+              children: [
+                const Text(
+                  'PUPPY HATCHED!',
+                  style: TextStyle(
+                    fontFamily: 'Lilita One',
+                    color: Color(0xFFB45309),
+                    fontSize: 19,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF3C7),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: const Color(0xFFF59E0B),
+                      width: 2,
+                    ),
+                  ),
+                  child: Image.asset(
+                    _hatchedPup!['img'] ??
+                        'assets/itemsInShop/dogs/BulldogPuppySit.png',
+                    width: 78,
+                    height: 78,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  _hatchedPup!['name']!,
+                  style: const TextStyle(
+                    fontFamily: 'Lilita One',
+                    color: Color(0xFF3B1404),
+                    fontSize: 16,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  _hatchedPup!['rarity']!,
+                  style: const TextStyle(
+                    color: Color(0xFFDB2777),
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _hatchedPup!['desc']!,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Color(0xFF78350F),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                HoverScale(
+                  scale: 1.05,
+                  onTap: () {
+                    setState(() {
+                      _breedingState = 'idle';
+                      _hatchedPup = null;
+                    });
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFFFBBF24), Color(0xFFD97706)],
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                      ),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: const Color(0xFFFEF3C7),
+                        width: 1.5,
+                      ),
+                    ),
+                    child: const Text(
+                      'BREED ANOTHER',
+                      style: TextStyle(
+                        fontFamily: 'Lilita One',
+                        color: Color(0xFF3B1404),
+                        fontSize: 13.5,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+
+    return GenericModal(
+      title: 'BREEDING DEN',
+      maxWidth: 800,
+      scrollable: false,
+      onClose: widget.onClose ?? () => Navigator.of(context).pop(),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final needsScale =
+              constraints.maxWidth < 500 || constraints.maxHeight < 305;
+
+          if (needsScale) {
+            return Center(
+              child: FittedBox(
+                fit: BoxFit.contain,
+                child: SizedBox(width: 540, child: content),
+              ),
+            );
+          }
+
+          return Center(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: SizedBox(width: constraints.maxWidth, child: content),
+            ),
+          );
+        },
       ),
     );
   }
 
-  Widget _buildParentSelector(
-      String label, String currentVal, Function(String) onChanged) {
+  Widget _buildParentCard({
+    required String label,
+    required DogModel? selectedDog,
+    required List<DogModel> options,
+    required String emptyText,
+    required ValueChanged<String> onChanged,
+  }) {
+    final DogStageInfo? selectedInfo = selectedDog != null
+        ? DogStageInfo.getInfo(selectedDog)
+        : null;
+
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: const Color(0xFF2A1005),
+        color: const Color(0xFFFFFBEB),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF78350F)),
+        border: Border.all(color: const Color(0xFFD97706), width: 1.8),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x22000000),
+            blurRadius: 6,
+            offset: Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: const TextStyle(
-              color: Color(0xFFFEF08A),
-              fontWeight: FontWeight.bold,
-              fontSize: 12,
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+            decoration: BoxDecoration(
+              color: const Color(0xFF451A03),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontFamily: 'Lilita One',
+                color: Color(0xFFFEF08A),
+                fontSize: 11,
+                letterSpacing: 0.6,
+              ),
             ),
           ),
           const SizedBox(height: 8),
-          DropdownButton<String>(
-            value: currentVal,
-            isExpanded: true,
-            dropdownColor: const Color(0xFF1E0A02),
-            style: const TextStyle(
-                color: Colors.white, fontWeight: FontWeight.bold),
-            underline: Container(height: 1, color: Colors.amber),
-            items: _parentOptions
-                .map(
-                  (opt) => DropdownMenuItem<String>(
-                    value: opt['name']!,
-                    child: Text(opt['name']!),
+          Container(
+            width: 78,
+            height: 78,
+            decoration: BoxDecoration(
+              color: const Color(0xFFFEF3C7),
+              shape: BoxShape.circle,
+              border: Border.all(color: const Color(0xFFF59E0B), width: 1.5),
+            ),
+            alignment: Alignment.center,
+            child: selectedInfo != null
+                ? Image.asset(
+                    selectedInfo.sitImg,
+                    width: 62,
+                    height: 62,
+                    fit: BoxFit.contain,
+                  )
+                : const Icon(
+                    Icons.pets_rounded,
+                    color: Color(0xFFD97706),
+                    size: 32,
                   ),
-                )
-                .toList(),
-            onChanged: (val) {
-              if (val != null) onChanged(val);
-            },
           ),
+          const SizedBox(height: 6),
+          if (selectedDog != null && selectedInfo != null)
+            Text(
+              'Lv ${selectedDog.level} • ${selectedInfo.stageLabel}',
+              style: const TextStyle(
+                color: Color(0xFFB45309),
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          const SizedBox(height: 4),
+          if (options.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Text(
+                emptyText,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Color(0xFF92400E),
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            )
+          else
+            DropdownButton<String>(
+              value: selectedDog?.id,
+              isExpanded: true,
+              dropdownColor: const Color(0xFFFFFBEB),
+              style: const TextStyle(
+                color: Color(0xFF3B1404),
+                fontWeight: FontWeight.w800,
+                fontSize: 12.5,
+              ),
+              underline: Container(height: 1.5, color: const Color(0xFFD97706)),
+              items: options.map((dog) {
+                final info = DogStageInfo.getInfo(dog);
+                return DropdownMenuItem<String>(
+                  value: dog.id,
+                  child: Row(
+                    children: [
+                      Image.asset(info.sitImg, width: 22, height: 22),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          '${dog.name} (${info.breedName})',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+              onChanged: (val) {
+                if (val != null) onChanged(val);
+              },
+            ),
         ],
       ),
     );

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../components/common/hover_scale.dart';
 import '../components/common/sky_background.dart';
+import '../components/world/world_hud.dart';
 import '../components/world/world_isometric_grid.dart';
 import '../models/friend_visit_model.dart';
 import '../models/habitat_model.dart';
@@ -152,8 +153,10 @@ class _FriendVisitPageState extends State<FriendVisitPage> {
 
   String _fmt(int n) {
     if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
-    if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)} K';
-    return n.toString();
+    return n.toString().replaceAllMapped(
+          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+          (Match m) => '${m[1]},',
+        );
   }
 
   void _showToast(String message) {
@@ -337,11 +340,11 @@ class _FriendVisitPageState extends State<FriendVisitPage> {
                   ),
                 ),
 
-                // Bottom-left Islands badge button (matches player's WorldHud)
+                // Bottom-left Islands badge button (exact match to player's WorldHud)
                 Positioned(
-                  bottom: compact ? 10 : 16,
-                  left: compact ? 10 : 14,
-                  child: _buildIslandsBadgeButton(compact),
+                  bottom: 16,
+                  left: 14,
+                  child: _buildIslandsBadgeButton(w, h),
                 ),
 
                 // Bottom-center Guest Mode pill
@@ -413,57 +416,19 @@ class _FriendVisitPageState extends State<FriendVisitPage> {
     );
   }
 
-  Widget _buildIslandsBadgeButton(bool compact) {
-    final badgeScale = compact ? 0.72 : 0.88;
-    final badgeW = 118.0 * badgeScale;
-    final badgeH = 124.0 * badgeScale;
-
-    return Tooltip(
-      message: "Switch ${_friend.name}'s Islands",
-      child: HoverScale(
-        scale: 1.07,
-        onTap: _openIslandOverview,
-        child: SizedBox(
-          width: badgeW,
-          height: badgeH,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              Image.asset(
-                'assets/ui/IslandIcon.png',
-                width: badgeW,
-                height: badgeH,
-                fit: BoxFit.contain,
-              ),
-              Positioned(
-                left: badgeW * (0.49 - 0.56 / 2),
-                top: badgeH * 0.535,
-                width: badgeW * 0.56,
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    'ISLANDS',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: const Color(0xFF3B1404),
-                      fontFamily: 'Lilita One',
-                      fontSize: 15.0 * badgeScale,
-                      letterSpacing: 0.4,
-                      shadows: const [
-                        Shadow(
-                          color: Color(0xCCFFFFFF),
-                          offset: Offset(0, 1),
-                          blurRadius: 1,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+  Widget _buildIslandsBadgeButton(double screenW, double screenH) {
+    final badgeScale = WorldHUD.computeBadgeScale(screenW, screenH);
+    return WorldHUD.buildBadgeButton(
+      asset: 'assets/ui/IslandIcon.png',
+      label: 'ISLANDS',
+      textLeftPercent: 0.49,
+      textTopPercent: 0.535,
+      textWidthPercent: 0.56,
+      fontSize: 15.0,
+      tooltip: "Switch ${_friend.name}'s Islands",
+      onTap: _openIslandOverview,
+      badgeW: 118.0 * badgeScale,
+      badgeH: 124.0 * badgeScale,
     );
   }
 
@@ -999,51 +964,43 @@ class _FriendVisitPageState extends State<FriendVisitPage> {
           onTap: widget.onBackToWorld,
           child: Container(
             padding: EdgeInsets.symmetric(
-              horizontal: compact ? 9 : 13,
+              horizontal: compact ? 10 : 14,
               vertical: compact ? 6 : 8,
             ),
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [Color(0xFFFFFBEB), Color(0xFFFDE68A)],
+                colors: [Color(0xFF78350F), Color(0xFF451A03)],
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
               ),
               borderRadius: BorderRadius.circular(999),
               border: Border.all(
-                color: const Color(0xFFB45309),
-                width: 2.2,
+                color: const Color(0xFFFBBF24),
+                width: 2,
               ),
               boxShadow: const [
                 BoxShadow(
-                  color: Color(0x66000000),
-                  blurRadius: 10,
-                  offset: Offset(0, 4),
+                  color: Color(0x55000000),
+                  blurRadius: 8,
+                  offset: Offset(0, 3),
                 ),
               ],
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Container(
-                  width: compact ? 20 : 24,
-                  height: compact ? 20 : 24,
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Color(0xFF78350F),
-                  ),
-                  child: Icon(
-                    Icons.home_rounded,
-                    color: const Color(0xFFFEF08A),
-                    size: compact ? 13 : 15,
-                  ),
+                Icon(
+                  Icons.home_rounded,
+                  color: const Color(0xFFFEF08A),
+                  size: compact ? 16 : 19,
                 ),
-                SizedBox(width: compact ? 5 : 7),
+                SizedBox(width: compact ? 4 : 6),
                 Text(
                   'HOME',
                   style: TextStyle(
-                    color: const Color(0xFF3B1404),
+                    color: const Color(0xFFFFFBEB),
                     fontFamily: 'Lilita One',
-                    fontSize: compact ? 11 : 13.5,
+                    fontSize: compact ? 11.5 : 13.5,
                     letterSpacing: 0.6,
                   ),
                 ),
@@ -1053,7 +1010,7 @@ class _FriendVisitPageState extends State<FriendVisitPage> {
         ),
         SizedBox(width: compact ? 8 : 12),
 
-        // Friend Passport Banner
+        // Friend Crest & Island Banner (warm parchment + level medallion)
         Expanded(
           child: Align(
             alignment: Alignment.centerLeft,
@@ -1061,24 +1018,26 @@ class _FriendVisitPageState extends State<FriendVisitPage> {
               fit: BoxFit.scaleDown,
               alignment: Alignment.centerLeft,
               child: Container(
-                padding: EdgeInsets.symmetric(
-                  horizontal: compact ? 10 : 14,
-                  vertical: compact ? 5 : 7,
+                padding: EdgeInsets.fromLTRB(
+                  compact ? 6 : 8,
+                  compact ? 4 : 6,
+                  compact ? 12 : 16,
+                  compact ? 4 : 6,
                 ),
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
-                    colors: [Color(0xEE3B1404), Color(0xEE1E0A02)],
+                    colors: [Color(0xFFFFFBEB), Color(0xFFFEF3C7)],
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                   ),
-                  borderRadius: BorderRadius.circular(18),
+                  borderRadius: BorderRadius.circular(999),
                   border: Border.all(
-                    color: const Color(0xFFFBBF24),
-                    width: 2,
+                    color: const Color(0xFFD97706),
+                    width: 2.2,
                   ),
                   boxShadow: const [
                     BoxShadow(
-                      color: Color(0x66000000),
+                      color: Color(0x55000000),
                       blurRadius: 10,
                       offset: Offset(0, 4),
                     ),
@@ -1087,39 +1046,62 @@ class _FriendVisitPageState extends State<FriendVisitPage> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // Level Medallion + Online Dot
                     Stack(
+                      clipBehavior: Clip.none,
                       children: [
                         Container(
-                          width: compact ? 28 : 34,
-                          height: compact ? 28 : 34,
+                          width: compact ? 32 : 38,
+                          height: compact ? 32 : 38,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             gradient: const LinearGradient(
                               colors: [Color(0xFFFDE047), Color(0xFFD97706)],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
                             ),
                             border: Border.all(
-                              color: const Color(0xFFFFFBEB),
-                              width: 1.5,
+                              color: const Color(0xFF78350F),
+                              width: 2,
                             ),
                           ),
-                          child: Icon(
-                            Icons.pets_rounded,
-                            color: const Color(0xFF3B1404),
-                            size: compact ? 16 : 19,
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                'LV',
+                                style: TextStyle(
+                                  color: const Color(0xFF78350F),
+                                  fontFamily: 'Lilita One',
+                                  fontSize: compact ? 7 : 8,
+                                  height: 0.9,
+                                ),
+                              ),
+                              Text(
+                                '${_friend.level}',
+                                style: TextStyle(
+                                  color: const Color(0xFF3B1404),
+                                  fontFamily: 'Lilita One',
+                                  fontSize: compact ? 12 : 14,
+                                  height: 1.0,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                         Positioned(
-                          right: 0,
-                          bottom: 0,
+                          right: -1,
+                          bottom: -1,
                           child: Container(
-                            width: 10,
-                            height: 10,
+                            width: 11,
+                            height: 11,
                             decoration: BoxDecoration(
                               color: _friend.status == 'Online'
                                   ? const Color(0xFF22C55E)
                                   : const Color(0xFF9CA3AF),
                               shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 1.5),
+                              border:
+                                  Border.all(color: Colors.white, width: 1.8),
                             ),
                           ),
                         ),
@@ -1133,31 +1115,55 @@ class _FriendVisitPageState extends State<FriendVisitPage> {
                         Text(
                           'VISITING ${_friend.islandName.toUpperCase()}',
                           style: TextStyle(
-                            color: const Color(0xFFFEF08A),
+                            color: const Color(0xFF3B1404),
                             fontFamily: 'Lilita One',
-                            fontSize: compact ? 14 : 17,
+                            fontSize: compact ? 13.5 : 16,
                             letterSpacing: 0.5,
+                            shadows: const [
+                              Shadow(
+                                color: Color(0xCCFFFFFF),
+                                offset: Offset(0, 1),
+                                blurRadius: 1,
+                              ),
+                            ],
                           ),
                         ),
+                        const SizedBox(height: 1),
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Container(
-                              width: 8,
-                              height: 8,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 7,
+                                vertical: 1.5,
+                              ),
                               decoration: BoxDecoration(
-                                color: currentIsland.themeColor,
-                                shape: BoxShape.circle,
+                                color: currentIsland.themeColor
+                                    .withValues(alpha: 0.18),
+                                borderRadius: BorderRadius.circular(999),
+                                border: Border.all(
+                                  color: currentIsland.themeColor,
+                                  width: 1,
+                                ),
+                              ),
+                              child: Text(
+                                currentIsland.name,
+                                style: TextStyle(
+                                  color: const Color(0xFF451A03),
+                                  fontFamily: 'Fredoka',
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: compact ? 9.5 : 10.5,
+                                ),
                               ),
                             ),
-                            const SizedBox(width: 5),
+                            const SizedBox(width: 6),
                             Text(
-                              '${_friend.name} · ${currentIsland.name} · Lv ${_friend.level}',
+                              _friend.name,
                               style: TextStyle(
-                                color: const Color(0xFFFCD34D),
+                                color: const Color(0xFF92400E),
                                 fontFamily: 'Fredoka',
-                                fontWeight: FontWeight.w600,
-                                fontSize: compact ? 10 : 11.5,
+                                fontWeight: FontWeight.w700,
+                                fontSize: compact ? 10 : 11,
                               ),
                             ),
                           ],
@@ -1172,11 +1178,15 @@ class _FriendVisitPageState extends State<FriendVisitPage> {
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF065F46),
-                          borderRadius: BorderRadius.circular(12),
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF10B981), Color(0xFF059669)],
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                          ),
+                          borderRadius: BorderRadius.circular(999),
                           border: Border.all(
-                            color: const Color(0xFF6EE7B7),
-                            width: 1.2,
+                            color: const Color(0xFFA7F3D0),
+                            width: 1.4,
                           ),
                         ),
                         child: Row(
@@ -1184,7 +1194,7 @@ class _FriendVisitPageState extends State<FriendVisitPage> {
                           children: [
                             const Icon(
                               Icons.favorite_rounded,
-                              color: Color(0xFFFCA5A5),
+                              color: Colors.white,
                               size: 13,
                             ),
                             const SizedBox(width: 4),

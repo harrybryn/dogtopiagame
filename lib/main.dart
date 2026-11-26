@@ -126,21 +126,25 @@ class _DogtopiaRootState extends State<DogtopiaRoot>
       }
     });
 
-    LocalSaveService.instance.loadInto(_game).then((_) async {
-      if (CloudSaveService.instance.isSignedIn || _pendingCloudSync) {
-        _pendingCloudSync = false;
-        await CloudSaveService.instance.syncOnLogin(_game);
-      }
-      if (mounted) {
-        setState(() => _saveHydrated = true);
-      }
-    });
+    _initServices();
+  }
 
-    SoundManager.instance.init().then((_) {
-      if (_game.bgmEnabled) {
-        SoundManager.instance.startBgm();
-      }
-    });
+  Future<void> _initServices() async {
+    await SoundManager.instance.init();
+    if (!mounted) return;
+    _game.syncAudioFromSoundManager();
+    if (_game.bgmEnabled) {
+      SoundManager.instance.startBgm();
+    }
+    await LocalSaveService.instance.loadInto(_game);
+    if (!mounted) return;
+    if (CloudSaveService.instance.isSignedIn || _pendingCloudSync) {
+      _pendingCloudSync = false;
+      await CloudSaveService.instance.syncOnLogin(_game);
+    }
+    if (!mounted) return;
+    _game.syncAudioFromSoundManager();
+    setState(() => _saveHydrated = true);
   }
 
   void _onGameStateChanged() {
