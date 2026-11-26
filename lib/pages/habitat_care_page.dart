@@ -1347,6 +1347,8 @@ class _HabitatCarePageState extends State<HabitatCarePage>
 
                                   // Take a Bath Button
                                   Expanded(
+                                    key: widget.walkthroughKeys?[
+                                        WalkthroughTargets.careBathButton],
                                     flex: 2,
                                     child: HoverScale(
                                       scale: 1.05,

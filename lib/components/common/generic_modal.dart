@@ -101,31 +101,6 @@ class GenericModal extends StatelessWidget {
                 ),
               ),
 
-              // Close (X) Button positioned exactly over the red 'X' in GenericModal.png
-              Positioned(
-                left: modalW * 0.825,
-                top: modalH * 0.08,
-                width: modalW * 0.09,
-                height: modalW * 0.09,
-                child: MouseRegion(
-                  cursor: SystemMouseCursors.click,
-                  onEnter: (_) => SoundManager.instance.playHover(),
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () {
-                      SoundManager.instance.playClick();
-                      onClose();
-                    },
-                    child: Container(
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.transparent,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-
               // Inner content area inside the parchment frame — bounded for ListViews and scrolls
               Positioned(
                 left: modalW * 0.12,
@@ -139,6 +114,29 @@ class GenericModal extends StatelessWidget {
                     child: scrollable
                         ? SingleChildScrollView(child: child)
                         : child,
+                  ),
+                ),
+              ),
+
+              // Close (X) Button placed last in Stack so it is always on top of content
+              Positioned(
+                left: modalW * 0.815,
+                top: modalH * 0.068,
+                width: modalW * 0.11,
+                height: modalW * 0.11,
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  onEnter: (_) => SoundManager.instance.playHover(),
+                  child: Material(
+                    type: MaterialType.transparency,
+                    child: InkWell(
+                      customBorder: const CircleBorder(),
+                      onTap: () {
+                        SoundManager.instance.playClick();
+                        onClose();
+                      },
+                      child: const SizedBox.expand(),
+                    ),
                   ),
                 ),
               ),

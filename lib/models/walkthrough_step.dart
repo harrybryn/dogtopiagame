@@ -4,6 +4,7 @@ enum WalkthroughStepId {
   selectGarden,
   enterHabitatCare,
   feedDog,
+  batheDog,
   backFromHabitat,
   selectFactory,
   enterFactory,
@@ -12,6 +13,8 @@ enum WalkthroughStepId {
   collectKibble,
   backFromFactory,
   shopAndGoals,
+  exploreIslands,
+  socialAndProgress,
   graduation,
 }
 
@@ -28,8 +31,11 @@ class WalkthroughTargets {
   static const String hudCareDog = 'hud_care_dog';
   static const String hudMakeFood = 'hud_make_food';
   static const String hudBuild = 'hud_build';
+  static const String hudIslands = 'hud_islands';
+  static const String hudSocial = 'hud_social';
   static const String careDogStation = 'care_dog_station';
   static const String careFeedButton = 'care_feed_button';
+  static const String careBathButton = 'care_bath_button';
   static const String careBackButton = 'care_back_button';
   static const String factoryBakeButton = 'factory_bake_button';
   static const String factorySpeedUpButton = 'factory_speed_up_button';
@@ -115,6 +121,17 @@ class WalkthroughStep {
       requireAction: true,
     ),
     WalkthroughStep(
+      id: WalkthroughStepId.batheDog,
+      title: 'BATHE & PET YOUR PUP',
+      message:
+          'Tap BATH to scrub away mud and rinse your pup for bonus Paw Coins, or tap Winston directly to pet him!',
+      requiredRoute: 'habitat',
+      targetKeyId: WalkthroughTargets.careBathButton,
+      highlightAreaKeyId: WalkthroughTargets.careDogStation,
+      arrowDirection: WalkthroughArrowDirection.left,
+      ctaLabel: 'NEXT',
+    ),
+    WalkthroughStep(
       id: WalkthroughStepId.backFromHabitat,
       title: 'OUT OF KIBBLE!',
       message:
@@ -191,6 +208,26 @@ class WalkthroughStep {
           'Use BUILD to buy new habitats, facilities, and dogs — and check GOALS on the left for bonus rewards!',
       requiredRoute: 'world',
       targetKeyId: WalkthroughTargets.hudBuild,
+      ctaLabel: 'NEXT',
+    ),
+    WalkthroughStep(
+      id: WalkthroughStepId.exploreIslands,
+      title: 'EXPLORE NEW ISLANDS',
+      message:
+          'Tap ISLANDS here to open the World Map, unlock new themed islands, and expand your Dogtopia!',
+      requiredRoute: 'world',
+      targetKeyId: WalkthroughTargets.hudIslands,
+      arrowDirection: WalkthroughArrowDirection.down,
+      ctaLabel: 'NEXT',
+    ),
+    WalkthroughStep(
+      id: WalkthroughStepId.socialAndProgress,
+      title: 'FRIENDS, BREEDING & PROGRESS',
+      message:
+          'Tap SOCIAL to add friends, send real-time gifts, and visit their islands! Check GOALS, PROGRESS, and the BREEDING DEN as you level up.',
+      requiredRoute: 'world',
+      targetKeyId: WalkthroughTargets.hudSocial,
+      arrowDirection: WalkthroughArrowDirection.left,
       ctaLabel: 'NEXT',
     ),
     WalkthroughStep(

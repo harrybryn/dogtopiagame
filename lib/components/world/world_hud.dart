@@ -7,6 +7,7 @@ import '../../models/dog_model.dart';
 import '../../models/dog_evolution.dart';
 import '../common/hover_scale.dart';
 import '../../models/walkthrough_step.dart';
+import '../../services/social_service.dart';
 
 class WorldHUD extends StatelessWidget {
   final GameController game;
@@ -17,6 +18,7 @@ class WorldHUD extends StatelessWidget {
   final VoidCallback onOpenSocial;
   final VoidCallback onOpenRanking;
   final VoidCallback onOpenSettings;
+  final VoidCallback? onOpenInbox;
   final VoidCallback onOpenBreeding;
   final VoidCallback onOpenCollection;
   final void Function(HabitatModel hab, [int dogIndex]) onOpenHabitatCare;
@@ -35,6 +37,7 @@ class WorldHUD extends StatelessWidget {
     required this.onOpenSocial,
     required this.onOpenRanking,
     required this.onOpenSettings,
+    this.onOpenInbox,
     required this.onOpenBreeding,
     required this.onOpenCollection,
     required this.onOpenHabitatCare,
@@ -168,6 +171,13 @@ class WorldHUD extends StatelessWidget {
                           pillW: pillW,
                           pillH: pillH,
                         ),
+                        if (onOpenInbox != null) ...[
+                          SizedBox(width: isCompact ? 6 : 10),
+                          HoverInboxButton(
+                            onTap: onOpenInbox!,
+                            size: settingsSize,
+                          ),
+                        ],
                         SizedBox(width: isCompact ? 6 : 10),
                         HoverSettingsButton(
                           onTap: onOpenSettings,
@@ -216,17 +226,20 @@ class WorldHUD extends StatelessWidget {
               ),
               SizedBox(height: isCompact ? 6 : 10),
 
-              _buildBadgeButton(
-                asset: 'assets/ui/SocialIcon.png',
-                label: 'SOCIAL',
-                textLeftPercent: 0.50,
-                textTopPercent: 0.630,
-                textWidthPercent: 0.70,
-                fontSize: 15.0,
-                tooltip: 'Friends & Social Island Visits',
-                onTap: onOpenSocial,
-                badgeW: 118.0 * badgeScale,
-                badgeH: 124.0 * badgeScale,
+              KeyedSubtree(
+                key: walkthroughKeys?[WalkthroughTargets.hudSocial],
+                child: _buildBadgeButton(
+                  asset: 'assets/ui/SocialIcon.png',
+                  label: 'SOCIAL',
+                  textLeftPercent: 0.50,
+                  textTopPercent: 0.630,
+                  textWidthPercent: 0.70,
+                  fontSize: 15.0,
+                  tooltip: 'Friends & Social Island Visits',
+                  onTap: onOpenSocial,
+                  badgeW: 118.0 * badgeScale,
+                  badgeH: 124.0 * badgeScale,
+                ),
               ),
             ],
           ),
@@ -306,17 +319,20 @@ class WorldHUD extends StatelessWidget {
           Positioned(
             bottom: 16,
             left: 14,
-            child: _buildBadgeButton(
-              asset: 'assets/ui/IslandIcon.png',
-              label: 'ISLANDS',
-              textLeftPercent: 0.49,
-              textTopPercent: 0.535,
-              textWidthPercent: 0.56,
-              fontSize: 15.0,
-              tooltip: 'Explore World Islands (${game.currentIsland.name})',
-              onTap: onOpenIslands!,
-              badgeW: 118.0 * badgeScale,
-              badgeH: 124.0 * badgeScale,
+            child: KeyedSubtree(
+              key: walkthroughKeys?[WalkthroughTargets.hudIslands],
+              child: _buildBadgeButton(
+                asset: 'assets/ui/IslandIcon.png',
+                label: 'ISLANDS',
+                textLeftPercent: 0.49,
+                textTopPercent: 0.535,
+                textWidthPercent: 0.56,
+                fontSize: 15.0,
+                tooltip: 'Explore World Islands (${game.currentIsland.name})',
+                onTap: onOpenIslands!,
+                badgeW: 118.0 * badgeScale,
+                badgeH: 124.0 * badgeScale,
+              ),
             ),
           ),
 
@@ -1724,6 +1740,119 @@ class _HoverSettingsButtonState extends State<HoverSettingsButton> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class HoverInboxButton extends StatefulWidget {
+  final VoidCallback onTap;
+  final double size;
+  const HoverInboxButton({super.key, required this.onTap, this.size = 56.0});
+
+  @override
+  State<HoverInboxButton> createState() => _HoverInboxButtonState();
+}
+
+class _HoverInboxButtonState extends State<HoverInboxButton> {
+  bool _hovered = false;
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<void>(
+      stream: SocialService.instance.onSocialChanged,
+      builder: (context, _) {
+        final unclaimed = SocialService.instance.unclaimedGiftCount;
+        return Tooltip(
+          message: unclaimed > 0
+              ? 'Gift Inbox ($unclaimed unclaimed)'
+              : 'Gift Inbox',
+          child: MouseRegion(
+            cursor: SystemMouseCursors.click,
+            onEnter: (_) => setState(() => _hovered = true),
+            onExit: (_) => setState(() => _hovered = false),
+            child: GestureDetector(
+              onTapDown: (_) => setState(() => _pressed = true),
+              onTapUp: (_) => setState(() => _pressed = false),
+              onTapCancel: () => setState(() => _pressed = false),
+              onTap: widget.onTap,
+              child: AnimatedScale(
+                scale: _pressed ? 0.92 : (_hovered ? 1.08 : 1.0),
+                duration: const Duration(milliseconds: 160),
+                curve: Curves.easeOutBack,
+                child: SizedBox(
+                  width: widget.size,
+                  height: widget.size,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    alignment: Alignment.center,
+                    children: [
+                      Container(
+                        width: widget.size * 0.86,
+                        height: widget.size * 0.86,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Color(0x66000000),
+                              blurRadius: 8,
+                              offset: Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Image.asset(
+                        'assets/ui/SettingPlaceHolder.webp',
+                        width: widget.size,
+                        height: widget.size,
+                        fit: BoxFit.contain,
+                        filterQuality: FilterQuality.high,
+                      ),
+                      Icon(
+                        unclaimed > 0
+                            ? Icons.mark_email_unread_rounded
+                            : Icons.mail_rounded,
+                        color: Colors.white,
+                        size: widget.size * 0.48,
+                        shadows: const [
+                          Shadow(
+                            color: Color(0xCC000000),
+                            offset: Offset(0, 2),
+                            blurRadius: 4,
+                          ),
+                        ],
+                      ),
+                      if (unclaimed > 0)
+                        Positioned(
+                          top: -2,
+                          right: -2,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFDC2626),
+                              borderRadius: BorderRadius.circular(10),
+                              border:
+                                  Border.all(color: Colors.white, width: 1.5),
+                            ),
+                            child: Text(
+                              '$unclaimed',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontFamily: 'Lilita One',
+                                fontSize: 10,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

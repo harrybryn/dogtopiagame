@@ -6,6 +6,8 @@ import 'state/game_controller.dart';
 import 'services/audio_service.dart';
 import 'services/cloud_save_service.dart';
 import 'services/local_save_service.dart';
+import 'services/social_service.dart';
+import 'components/common/existing_account_dialog.dart';
 import 'components/common/loading_screen.dart';
 import 'components/common/username_setup_overlay.dart';
 import 'components/common/walkthrough_overlay.dart';
@@ -94,8 +96,11 @@ class _DogtopiaRootState extends State<DogtopiaRoot>
     WalkthroughTargets.hudCareDog: GlobalKey(),
     WalkthroughTargets.hudMakeFood: GlobalKey(),
     WalkthroughTargets.hudBuild: GlobalKey(),
+    WalkthroughTargets.hudIslands: GlobalKey(),
+    WalkthroughTargets.hudSocial: GlobalKey(),
     WalkthroughTargets.careDogStation: GlobalKey(),
     WalkthroughTargets.careFeedButton: GlobalKey(),
+    WalkthroughTargets.careBathButton: GlobalKey(),
     WalkthroughTargets.careBackButton: GlobalKey(),
     WalkthroughTargets.factoryBakeButton: GlobalKey(),
     WalkthroughTargets.factorySpeedUpButton: GlobalKey(),
@@ -105,7 +110,9 @@ class _DogtopiaRootState extends State<DogtopiaRoot>
   bool _isLoading = true;
   bool _saveHydrated = false;
   bool _pendingCloudSync = false;
+  String? _giftBannerMessage;
   StreamSubscription<AuthState>? _authSub;
+  StreamSubscription<String>? _giftSub;
   String _currentRoute = 'world';
   Map<String, dynamic> _routeArgs = {};
 
@@ -115,11 +122,28 @@ class _DogtopiaRootState extends State<DogtopiaRoot>
     WidgetsBinding.instance.addObserver(this);
     _game.addListener(_onGameStateChanged);
 
-    _authSub = CloudSaveService.instance.onAuthStateChange.listen((data) {
+    _giftSub = SocialService.instance.onGiftNotification.listen((msg) {
+      if (!mounted) return;
+      SoundManager.instance.playQuestReward();
+      setState(() => _giftBannerMessage = msg);
+      Future.delayed(const Duration(seconds: 4), () {
+        if (mounted && _giftBannerMessage == msg) {
+          setState(() => _giftBannerMessage = null);
+        }
+      });
+    });
+
+    _authSub = CloudSaveService.instance.onAuthStateChange.listen((data) async {
+      if (data.event == AuthChangeEvent.signedOut) {
+        await SocialService.instance.stopRealtime();
+        return;
+      }
       if (data.event == AuthChangeEvent.signedIn ||
           data.event == AuthChangeEvent.initialSession) {
         if (_saveHydrated) {
-          CloudSaveService.instance.syncOnLogin(_game);
+          final status = await CloudSaveService.instance.syncOnLogin(_game);
+          _handleExistingAccountPromptIfNeeded(status);
+          SocialService.instance.startRealtime(_game);
         } else {
           _pendingCloudSync = true;
         }
@@ -127,6 +151,19 @@ class _DogtopiaRootState extends State<DogtopiaRoot>
     });
 
     _initServices();
+  }
+
+  void _handleExistingAccountPromptIfNeeded(CloudSyncStatus status) {
+    final pending = CloudSaveService.instance.pendingExistingAccount;
+    if (status == CloudSyncStatus.accountAlreadyExists &&
+        pending != null &&
+        mounted) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          showExistingGoogleAccountDialog(context, _game, pending);
+        }
+      });
+    }
   }
 
   Future<void> _initServices() async {
@@ -140,7 +177,9 @@ class _DogtopiaRootState extends State<DogtopiaRoot>
     if (!mounted) return;
     if (CloudSaveService.instance.isSignedIn || _pendingCloudSync) {
       _pendingCloudSync = false;
-      await CloudSaveService.instance.syncOnLogin(_game);
+      final status = await CloudSaveService.instance.syncOnLogin(_game);
+      _handleExistingAccountPromptIfNeeded(status);
+      SocialService.instance.startRealtime(_game);
     }
     if (!mounted) return;
     _game.syncAudioFromSoundManager();
@@ -179,6 +218,8 @@ class _DogtopiaRootState extends State<DogtopiaRoot>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _authSub?.cancel();
+    _giftSub?.cancel();
+    SocialService.instance.stopRealtime();
     _game.removeListener(_onGameStateChanged);
     if (_saveHydrated && _game.hasUsername) {
       LocalSaveService.instance.saveNow(_game);
@@ -346,6 +387,30 @@ class _DogtopiaRootState extends State<DogtopiaRoot>
                       SoundManager.instance.playWalkthroughPop();
                     }
                   },
+                  onLoginExistingAccount: () async {
+                    final ok = await CloudSaveService.instance.signInWithGoogle(
+                      preferCloud: true,
+                    );
+                    if (!ok) {
+                      return 'Google sign-in was cancelled or failed.';
+                    }
+                    if (CloudSaveService.instance.isSignedIn) {
+                      final status = await CloudSaveService.instance.syncOnLogin(
+                        _game,
+                        preferCloud: true,
+                      );
+                      if (status == CloudSyncStatus.loadedFromCloud) {
+                        await LocalSaveService.instance.saveNow(_game);
+                        return null;
+                      }
+                      if (status == CloudSyncStatus.failed) {
+                        return CloudSaveService.instance.lastError ??
+                            'Failed to load cloud account.';
+                      }
+                      return 'Signed in, but no saved island was found. Enter a username to start!';
+                    }
+                    return null;
+                  },
                 )
               else if (_game.walkthroughActive)
                 WalkthroughOverlay(
@@ -354,6 +419,52 @@ class _DogtopiaRootState extends State<DogtopiaRoot>
                   targetKeys: _walkthroughKeys,
                   worldTargetRectNotifier: _walkthroughWorldTargetRect,
                   onReturnToWorld: () => _navigateTo('world'),
+                ),
+              if (_giftBannerMessage != null)
+                Positioned(
+                  top: 16,
+                  left: 0,
+                  right: 0,
+                  child: IgnorePointer(
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 18, vertical: 10),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF10B981), Color(0xFF047857)],
+                          ),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                              color: const Color(0xFFFEF08A), width: 2),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Color(0x88000000),
+                              blurRadius: 12,
+                              offset: Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.card_giftcard_rounded,
+                                color: Color(0xFFFEF08A), size: 18),
+                            const SizedBox(width: 8),
+                            Text(
+                              _giftBannerMessage!,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontFamily: 'Lilita One',
+                                fontSize: 13.5,
+                                decoration: TextDecoration.none,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
             ],
           );

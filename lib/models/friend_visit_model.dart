@@ -14,6 +14,7 @@ class MockFriend {
   final String status;
   final int level;
   final String favoriteDog;
+  final String? avatarUrl;
   final List<HabitatModel> habitats;
   final Set<String> unlockedIslandIds;
   final Map<String, Set<int>> unlockedLotsByIsland;
@@ -27,6 +28,7 @@ class MockFriend {
     required this.status,
     required this.level,
     this.favoriteDog = 'Golden Retriever',
+    this.avatarUrl,
     required this.habitats,
     Set<String>? unlockedIslandIds,
     Map<String, Set<int>>? unlockedLotsByIsland,
@@ -96,6 +98,67 @@ class MockFriend {
       habitatId: habitatId,
       habitatName: habitatName,
       adoptedAt: now,
+    );
+  }
+
+  static MockFriend fromCloudSave({
+    required String userId,
+    required String username,
+    required int level,
+    required Map<String, dynamic> saveData,
+    DateTime? updatedAt,
+  }) {
+    final rawHabitats = saveData['placedHabitats'] as List<dynamic>? ?? [];
+    final habitats = rawHabitats
+        .map((h) => HabitatModel.fromJson(Map<String, dynamic>.from(h as Map)))
+        .toList();
+
+    final rawIslands = saveData['unlockedIslandIds'] as List<dynamic>?;
+    final unlockedIslandIds = rawIslands != null && rawIslands.isNotEmpty
+        ? rawIslands.map((e) => e.toString()).toSet()
+        : {IslandCatalog.starterIslandId};
+
+    final unlockedLotsByIsland = <String, Set<int>>{};
+    final rawLots = saveData['unlockedLotsByIsland'] as Map<String, dynamic>?;
+    if (rawLots != null) {
+      for (final entry in rawLots.entries) {
+        final list = entry.value as List<dynamic>? ?? [];
+        unlockedLotsByIsland[entry.key] =
+            list.map((e) => (e as num).toInt()).toSet();
+      }
+    }
+
+    final obstaclesByIsland = <String, List<ObstacleModel>>{};
+    final rawObs = saveData['obstaclesByIsland'] as Map<String, dynamic>?;
+    if (rawObs != null) {
+      for (final entry in rawObs.entries) {
+        final list = entry.value as List<dynamic>? ?? [];
+        obstaclesByIsland[entry.key] = list
+            .map(
+              (o) => ObstacleModel.fromJson(Map<String, dynamic>.from(o as Map)),
+            )
+            .toList();
+      }
+    }
+
+    final dogs = habitats.expand((h) => h.dogs).toList();
+    final favoriteDog =
+        dogs.isNotEmpty ? dogs.first.name : 'No dogs yet';
+    final isRecentlyActive = updatedAt != null &&
+        DateTime.now().difference(updatedAt).inMinutes < 5;
+
+    return MockFriend(
+      id: userId,
+      name: username,
+      islandName: "$username's Island",
+      status: isRecentlyActive ? 'Online' : 'Offline',
+      level: level,
+      favoriteDog: favoriteDog,
+      avatarUrl: saveData['avatarUrl'] as String?,
+      habitats: habitats,
+      unlockedIslandIds: unlockedIslandIds,
+      unlockedLotsByIsland: unlockedLotsByIsland,
+      obstaclesByIsland: obstaclesByIsland,
     );
   }
 

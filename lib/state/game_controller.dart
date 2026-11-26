@@ -187,9 +187,10 @@ class GameController extends ChangeNotifier {
   }
 
   void setUsername(String name) {
-    final cleaned = name.trim();
+    final cleaned = name.replaceAll(RegExp(r'\s+'), '');
     if (cleaned.isEmpty) return;
-    _playerUsername = cleaned;
+    _playerUsername =
+        cleaned.length > 12 ? cleaned.substring(0, 12) : cleaned;
     SoundManager.instance.playClick();
     notifyListeners();
   }

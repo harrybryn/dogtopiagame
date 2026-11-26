@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import '../../services/cloud_save_service.dart';
 import 'hover_scale.dart';
 
 class UsernameSetupOverlay extends StatefulWidget {
   final ValueChanged<String> onConfirmUsername;
+  final Future<String?> Function()? onLoginExistingAccount;
 
   const UsernameSetupOverlay({
     super.key,
     required this.onConfirmUsername,
+    this.onLoginExistingAccount,
   });
 
   @override
@@ -18,6 +22,7 @@ class _UsernameSetupOverlayState extends State<UsernameSetupOverlay>
   final TextEditingController _controller = TextEditingController();
   late final AnimationController _bobController;
   String? _errorText;
+  bool _isChecking = false;
 
   @override
   void initState() {
@@ -35,17 +40,49 @@ class _UsernameSetupOverlayState extends State<UsernameSetupOverlay>
     super.dispose();
   }
 
-  void _submit() {
+  Future<void> _submit() async {
+    if (_isChecking) return;
     final name = _controller.text.trim();
+    if (RegExp(r'\s').hasMatch(name)) {
+      setState(() => _errorText = 'Username cannot contain spaces.');
+      return;
+    }
     if (name.length < 2) {
       setState(() => _errorText = 'Please enter at least 2 characters.');
       return;
     }
-    if (name.length > 16) {
-      setState(() => _errorText = 'Keep your name under 16 characters.');
+    if (name.length > 12) {
+      setState(() => _errorText = 'Keep your name under 12 characters.');
+      return;
+    }
+
+    setState(() {
+      _isChecking = true;
+      _errorText = null;
+    });
+    final error = await CloudSaveService.instance.checkUsernameAvailability(name);
+    if (!mounted) return;
+    setState(() => _isChecking = false);
+
+    if (error != null) {
+      setState(() => _errorText = error);
       return;
     }
     widget.onConfirmUsername(name);
+  }
+
+  Future<void> _handleExistingLogin() async {
+    if (_isChecking || widget.onLoginExistingAccount == null) return;
+    setState(() {
+      _isChecking = true;
+      _errorText = null;
+    });
+    final msg = await widget.onLoginExistingAccount!();
+    if (!mounted) return;
+    setState(() {
+      _isChecking = false;
+      if (msg != null) _errorText = msg;
+    });
   }
 
   @override
@@ -149,7 +186,11 @@ class _UsernameSetupOverlayState extends State<UsernameSetupOverlay>
                           TextField(
                             controller: _controller,
                             autofocus: true,
-                            maxLength: 16,
+                            maxLength: 12,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.deny(RegExp(r'\s')),
+                              LengthLimitingTextInputFormatter(12),
+                            ],
                             textInputAction: TextInputAction.done,
                             onSubmitted: (_) => _submit(),
                             onChanged: (_) {
@@ -209,7 +250,7 @@ class _UsernameSetupOverlayState extends State<UsernameSetupOverlay>
                           // Start CTA
                           HoverScale(
                             scale: 1.06,
-                            onTap: _submit,
+                            onTap: _isChecking ? null : _submit,
                             child: Container(
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 34, vertical: 13),
@@ -233,8 +274,8 @@ class _UsernameSetupOverlayState extends State<UsernameSetupOverlay>
                                   ),
                                 ],
                               ),
-                              child: const Text(
-                                'START MY ISLAND',
+                              child: Text(
+                                _isChecking ? 'CHECKING...' : 'START MY ISLAND',
                                 style: TextStyle(
                                   color: Colors.white,
                                   fontFamily: 'Lilita One',
@@ -252,6 +293,54 @@ class _UsernameSetupOverlayState extends State<UsernameSetupOverlay>
                               ),
                             ),
                           ),
+                          if (widget.onLoginExistingAccount != null &&
+                              CloudSaveService.instance.isAvailable &&
+                              !CloudSaveService.instance.isSignedIn) ...[
+                            const SizedBox(height: 12),
+                            HoverScale(
+                              scale: 1.04,
+                              onTap: _isChecking ? null : _handleExistingLogin,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 16, vertical: 9),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF3E1805),
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(
+                                    color: const Color(0xFFFBBF24),
+                                    width: 1.6,
+                                  ),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.login_rounded,
+                                      color: Color(0xFFFEF08A),
+                                      size: 16,
+                                    ),
+                                    SizedBox(width: 7),
+                                    Flexible(
+                                      child: FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        child: Text(
+                                          'Already have an account? Log in with Google',
+                                          maxLines: 1,
+                                          style: TextStyle(
+                                            color: Color(0xFFFEF08A),
+                                            fontFamily: 'Fredoka',
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 13,
+                                            decoration: TextDecoration.none,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),

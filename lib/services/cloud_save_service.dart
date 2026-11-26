@@ -14,7 +14,24 @@ enum CloudSyncStatus {
   uploadedLocal,
   loadedFromCloud,
   upToDate,
+  accountAlreadyExists,
   failed,
+}
+
+class ExistingCloudAccount {
+  final String email;
+  final String username;
+  final int level;
+  final int coins;
+  final Map<String, dynamic> saveData;
+
+  const ExistingCloudAccount({
+    required this.email,
+    required this.username,
+    required this.level,
+    required this.coins,
+    required this.saveData,
+  });
 }
 
 class CloudSaveService {
@@ -23,15 +40,18 @@ class CloudSaveService {
 
   static const String _tableName = 'player_saves';
   static const String _preferCloudOnLoginKey = 'dogtopia_prefer_cloud_on_login';
+  static const String _connectModeKey = 'dogtopia_google_connect_mode';
 
   bool _initialized = false;
   bool _isSyncing = false;
   String? _lastError;
+  ExistingCloudAccount? _pendingExistingAccount;
   Timer? _debounceTimer;
 
   bool get isAvailable => _initialized;
   bool get isSyncing => _isSyncing;
   String? get lastError => _lastError;
+  ExistingCloudAccount? get pendingExistingAccount => _pendingExistingAccount;
 
   SupabaseClient get _client => Supabase.instance.client;
 
@@ -69,6 +89,7 @@ class CloudSaveService {
     if (!_initialized) return false;
     try {
       final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_connectModeKey, preferCloud ? 'login' : 'connect');
       if (preferCloud) {
         await prefs.setBool(_preferCloudOnLoginKey, true);
       } else {
@@ -134,6 +155,12 @@ class CloudSaveService {
     _lastError = null;
     try {
       final payload = game.toJson();
+      final avatarUrl = (user.userMetadata?['avatar_url'] ??
+              user.userMetadata?['picture'])
+          ?.toString();
+      if (avatarUrl != null && avatarUrl.isNotEmpty) {
+        payload['avatarUrl'] = avatarUrl;
+      }
       await _client.from(_tableName).upsert(
         {
           'user_id': user.id,
@@ -153,10 +180,46 @@ class CloudSaveService {
     }
   }
 
+  /// Checks if [username] is available in `player_saves` (case-insensitive).
+  /// Returns `null` when available, or an error message if taken / check failed.
+  Future<String?> checkUsernameAvailability(
+    String username, {
+    String? excludeUserId,
+  }) async {
+    if (!_initialized) return null;
+    final cleaned = username.replaceAll(RegExp(r'\s+'), '');
+    if (cleaned.isEmpty) return 'Please enter a username.';
+    try {
+      final res = await _client.rpc(
+        'is_username_available',
+        params: {
+          'p_username': cleaned,
+          if (excludeUserId != null) 'p_exclude_user_id': excludeUserId,
+        },
+      );
+      if (res == false) {
+        return 'Username already exists. Choose another.';
+      }
+      return null;
+    } on PostgrestException catch (e) {
+      debugPrint('CloudSaveService.checkUsernameAvailability error: $e');
+      if (e.code == 'PGRST202') {
+        return 'Username check function missing in Supabase (run SQL setup).';
+      }
+      return 'Could not verify username. Try again.';
+    } catch (e) {
+      debugPrint('CloudSaveService.checkUsernameAvailability error: $e');
+      return null;
+    }
+  }
+
   /// Reconciles local and cloud progress using `savedAt` timestamps.
   ///
   /// When [preferCloud] is true (or was persisted via [signInWithGoogle]),
   /// an existing cloud save always takes precedence over local state.
+  /// When connecting via "Connect with Google" and an account already exists
+  /// in `player_saves`, returns [CloudSyncStatus.accountAlreadyExists] so the
+  /// UI can prompt the user before switching accounts.
   Future<CloudSyncStatus> syncOnLogin(
     GameController game, {
     bool preferCloud = false,
@@ -167,15 +230,21 @@ class CloudSaveService {
 
     _isSyncing = true;
     _lastError = null;
+    _pendingExistingAccount = null;
     try {
       final prefs = await SharedPreferences.getInstance();
+      final connectMode = prefs.getString(_connectModeKey);
       final shouldPreferCloud =
-          preferCloud || (prefs.getBool(_preferCloudOnLoginKey) ?? false);
+          preferCloud ||
+          connectMode == 'login' ||
+          (prefs.getBool(_preferCloudOnLoginKey) ?? false);
+      final isConnectFlow = !preferCloud && connectMode == 'connect';
+      await prefs.remove(_connectModeKey);
       await prefs.remove(_preferCloudOnLoginKey);
 
       final row = await _client
           .from(_tableName)
-          .select('save_data')
+          .select('username, level, coins, save_data')
           .eq('user_id', user.id)
           .maybeSingle();
 
@@ -192,6 +261,17 @@ class CloudSaveService {
 
       final cloudData = Map<String, dynamic>.from(row['save_data'] as Map);
       final cloudSavedAt = (cloudData['savedAt'] as num?)?.toInt() ?? 0;
+
+      if (isConnectFlow) {
+        _pendingExistingAccount = ExistingCloudAccount(
+          email: user.email ?? 'Google Account',
+          username: (row['username'] as String?) ?? 'Keeper',
+          level: (row['level'] as num?)?.toInt() ?? 1,
+          coins: (row['coins'] as num?)?.toInt() ?? 0,
+          saveData: cloudData,
+        );
+        return CloudSyncStatus.accountAlreadyExists;
+      }
 
       if (shouldPreferCloud || !game.hasUsername || cloudSavedAt > game.savedAt) {
         game.loadFromJson(cloudData);
@@ -215,6 +295,19 @@ class CloudSaveService {
     } finally {
       _isSyncing = false;
     }
+  }
+
+  Future<void> confirmLoadExistingAccount(GameController game) async {
+    final pending = _pendingExistingAccount;
+    _pendingExistingAccount = null;
+    if (pending == null) return;
+    game.loadFromJson(pending.saveData);
+    await LocalSaveService.instance.saveNow(game);
+  }
+
+  Future<void> cancelExistingAccountSignIn() async {
+    _pendingExistingAccount = null;
+    await signOut();
   }
 
   void cancelPending() {

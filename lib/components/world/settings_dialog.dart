@@ -1,10 +1,12 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../config/supabase_config.dart';
 import '../../state/game_controller.dart';
 import '../../services/audio_service.dart';
 import '../../services/cloud_save_service.dart';
 import '../../services/local_save_service.dart';
+import '../common/existing_account_dialog.dart';
 import '../common/generic_modal.dart';
 import '../common/hover_scale.dart';
 
@@ -63,6 +65,22 @@ class _SettingsDialogState extends State<SettingsDialog> {
         preferCloud: preferCloud,
       );
       if (!mounted) return;
+      if (status == CloudSyncStatus.accountAlreadyExists &&
+          CloudSaveService.instance.pendingExistingAccount != null) {
+        final loggedIn = await showExistingGoogleAccountDialog(
+          context,
+          widget.game,
+          CloudSaveService.instance.pendingExistingAccount!,
+        );
+        if (!mounted) return;
+        setState(() {
+          _isCloudBusy = false;
+          _cloudStatusNote = loggedIn
+              ? 'Logged in & restored existing cloud account!'
+              : 'Cancelled. Kept your current local island.';
+        });
+        return;
+      }
       setState(() {
         _isCloudBusy = false;
         switch (status) {
@@ -135,71 +153,125 @@ class _SettingsDialogState extends State<SettingsDialog> {
   void _openEditUsernameDialog() {
     final controller =
         TextEditingController(text: widget.game.playerUsername);
+    String? errorMsg;
+    bool checking = false;
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF2A1205),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: const BorderSide(color: Color(0xFFFBBF24), width: 2),
-        ),
-        title: const Text(
-          'CHANGE USERNAME',
-          style: TextStyle(
-            color: Color(0xFFFEF08A),
-            fontFamily: 'Lilita One',
-            fontSize: 18,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xFF2A1205),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side: const BorderSide(color: Color(0xFFFBBF24), width: 2),
           ),
-        ),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          maxLength: 16,
-          style: const TextStyle(
-            color: Colors.white,
-            fontFamily: 'Lilita One',
-            fontSize: 16,
-          ),
-          decoration: const InputDecoration(
-            counterStyle: TextStyle(color: Colors.white54),
-            hintText: 'Enter username (2-16 chars)...',
-            hintStyle: TextStyle(color: Colors.white38),
-            enabledBorder: UnderlineInputBorder(
-              borderSide: BorderSide(color: Color(0xFFF59E0B)),
-            ),
-            focusedBorder: UnderlineInputBorder(
-              borderSide: BorderSide(color: Color(0xFFFEF08A), width: 2),
+          title: const Text(
+            'CHANGE USERNAME',
+            style: TextStyle(
+              color: Color(0xFFFEF08A),
+              fontFamily: 'Lilita One',
+              fontSize: 18,
             ),
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('CANCEL',
-                style: TextStyle(color: Colors.white70, fontFamily: 'Lilita One')),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: controller,
+                autofocus: true,
+                maxLength: 12,
+                inputFormatters: [
+                  FilteringTextInputFormatter.deny(RegExp(r'\s')),
+                  LengthLimitingTextInputFormatter(12),
+                ],
+                onChanged: (_) {
+                  if (errorMsg != null) setDialogState(() => errorMsg = null);
+                },
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontFamily: 'Lilita One',
+                  fontSize: 16,
+                ),
+                decoration: const InputDecoration(
+                  counterStyle: TextStyle(color: Colors.white54),
+                  hintText: 'Enter username (2-12 chars, no spaces)...',
+                  hintStyle: TextStyle(color: Colors.white38),
+                  enabledBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: Color(0xFFF59E0B)),
+                  ),
+                  focusedBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: Color(0xFFFEF08A), width: 2),
+                  ),
+                ),
+              ),
+              if (errorMsg != null) ...[
+                const SizedBox(height: 6),
+                Text(
+                  errorMsg!,
+                  style: const TextStyle(
+                    color: Color(0xFFFCA5A5),
+                    fontFamily: 'Fredoka',
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ],
           ),
-          ElevatedButton(
-            onPressed: () {
-              final next = controller.text.trim();
-              if (next.length >= 2 && next.length <= 16) {
-                widget.game.setUsername(next);
-                LocalSaveService.instance.saveNow(widget.game);
-                if (CloudSaveService.instance.isSignedIn) {
-                  CloudSaveService.instance.saveNow(widget.game);
-                }
-                if (mounted) setState(() {});
-                Navigator.pop(ctx);
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFF59E0B),
-              foregroundColor: const Color(0xFF3B1404),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('CANCEL',
+                  style:
+                      TextStyle(color: Colors.white70, fontFamily: 'Lilita One')),
             ),
-            child: const Text('SAVE',
-                style: TextStyle(
-                    fontWeight: FontWeight.w900, fontFamily: 'Lilita One')),
-          ),
-        ],
+            ElevatedButton(
+              onPressed: checking
+                  ? null
+                  : () async {
+                      final next = controller.text.trim();
+                      if (next.length < 2 ||
+                          next.length > 12 ||
+                          RegExp(r'\s').hasMatch(next)) {
+                        setDialogState(
+                          () => errorMsg = 'Use 2-12 chars with no spaces.',
+                        );
+                        return;
+                      }
+                      setDialogState(() => checking = true);
+                      final error = await CloudSaveService.instance
+                          .checkUsernameAvailability(
+                        next,
+                        excludeUserId: CloudSaveService.instance.currentUser?.id,
+                      );
+                      if (!ctx.mounted) return;
+                      if (error != null) {
+                        setDialogState(() {
+                          checking = false;
+                          errorMsg = error;
+                        });
+                        return;
+                      }
+                      widget.game.setUsername(next);
+                      LocalSaveService.instance.saveNow(widget.game);
+                      if (CloudSaveService.instance.isSignedIn) {
+                        CloudSaveService.instance.saveNow(widget.game);
+                      }
+                      if (mounted) setState(() {});
+                      Navigator.pop(ctx);
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFF59E0B),
+                foregroundColor: const Color(0xFF3B1404),
+              ),
+              child: Text(
+                checking ? 'CHECKING...' : 'SAVE',
+                style: const TextStyle(
+                    fontWeight: FontWeight.w900, fontFamily: 'Lilita One'),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

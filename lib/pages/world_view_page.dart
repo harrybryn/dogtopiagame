@@ -13,6 +13,7 @@ import '../components/world/world_isometric_grid.dart';
 import '../components/world/world_hud.dart';
 import '../components/world/build_shop_dialog.dart';
 import '../components/world/goals_dialog.dart';
+import '../components/world/inbox_dialog.dart';
 import '../components/world/progress_dialog.dart';
 import '../components/world/ranking_dialog.dart';
 import '../components/world/social_dialog.dart';
@@ -720,6 +721,9 @@ class _WorldViewPageState extends State<WorldViewPage>
                                       showDialog(
                                         context: context,
                                         builder: (_) => SocialDialog(
+                                          game: widget.game,
+                                          senderUsername:
+                                              widget.game.playerUsername,
                                           onVisitFriend: (friend) {
                                             Navigator.of(context).pop();
                                             widget.onNavigate(
@@ -744,6 +748,13 @@ class _WorldViewPageState extends State<WorldViewPage>
                                         context: context,
                                         builder: (_) =>
                                             SettingsDialog(game: widget.game),
+                                      );
+                                    },
+                                    onOpenInbox: () {
+                                      showDialog(
+                                        context: context,
+                                        builder: (_) =>
+                                            InboxDialog(game: widget.game),
                                       );
                                     },
                                     onOpenBreeding: () {
