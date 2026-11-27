@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/friend_visit_model.dart';
+import '../../models/walkthrough_step.dart';
 import '../../services/audio_service.dart';
 import '../../services/social_service.dart';
 import '../../state/game_controller.dart';
@@ -13,6 +14,7 @@ class SocialDialog extends StatefulWidget {
   final String senderUsername;
   final VoidCallback? onVisit;
   final Function(MockFriend friend)? onVisitFriend;
+  final VoidCallback? onOpenSettings;
 
   const SocialDialog({
     super.key,
@@ -20,6 +22,7 @@ class SocialDialog extends StatefulWidget {
     this.senderUsername = 'Keeper',
     this.onVisit,
     this.onVisitFriend,
+    this.onOpenSettings,
   });
 
   @override
@@ -128,9 +131,22 @@ class _SocialDialogState extends State<SocialDialog> {
     }
   }
 
+  void _redirectToSettingsIfSignedOut() {
+    if (widget.onOpenSettings != null) {
+      Navigator.of(context).pop();
+      widget.onOpenSettings!();
+    } else {
+      _showToast('Connect with Google in Settings first!', isError: true);
+    }
+  }
+
   Future<void> _handleSendRequest(PlayerSearchPreview player) async {
     if (_isBusy) return;
     SoundManager.instance.playClick();
+    if (!SocialService.instance.isAvailable) {
+      _redirectToSettingsIfSignedOut();
+      return;
+    }
     setState(() => _isBusy = true);
     final error = await SocialService.instance.sendFriendRequestToUser(
       player.userId,
@@ -179,6 +195,10 @@ class _SocialDialogState extends State<SocialDialog> {
   Future<void> _sendGift(String id, String name) async {
     if (_isBusy) return;
     SoundManager.instance.playClick();
+    if (!SocialService.instance.isAvailable) {
+      _redirectToSettingsIfSignedOut();
+      return;
+    }
     setState(() => _isBusy = true);
     final error = await SocialService.instance.sendGift(
       receiverId: id,
@@ -1211,8 +1231,13 @@ class _SocialDialogState extends State<SocialDialog> {
   Widget build(BuildContext context) {
     final isSignedIn = SocialService.instance.isAvailable;
 
+    final highlightClose = (widget.game?.walkthroughActive ?? false) &&
+        widget.game?.currentWalkthroughStep?.id ==
+            WalkthroughStepId.socialAndProgress;
+
     return GenericModal(
       title: 'COMMUNITY & FRIENDS',
+      highlightClose: highlightClose,
       titleExtra: isSignedIn
           ? HoverScale(
               scale: 1.08,
@@ -1225,31 +1250,7 @@ class _SocialDialogState extends State<SocialDialog> {
             )
           : null,
       onClose: () => Navigator.of(context).pop(),
-      child: !isSignedIn
-          ? const Center(
-              child: Padding(
-                padding: EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.cloud_off_rounded,
-                        color: Color(0xFFB45309), size: 40),
-                    SizedBox(height: 10),
-                    Text(
-                      'Sign in with Google in Settings to search players, add friends, and visit their islands!',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Color(0xFF3B1404),
-                        fontFamily: 'Fredoka',
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            )
-          : Column(
+      child: Column(
               children: [
                 if (_toastMessage != null)
                   Container(

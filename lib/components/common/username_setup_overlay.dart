@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/cloud_save_service.dart';
+import '../world/settings_dialog.dart';
 import 'hover_scale.dart';
 
 class UsernameSetupOverlay extends StatefulWidget {
@@ -298,39 +299,49 @@ class _UsernameSetupOverlayState extends State<UsernameSetupOverlay>
                               !CloudSaveService.instance.isSignedIn) ...[
                             const SizedBox(height: 12),
                             HoverScale(
-                              scale: 1.04,
+                              scale: 1.025,
                               onTap: _isChecking ? null : _handleExistingLogin,
                               child: Container(
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 16, vertical: 9),
+                                    horizontal: 16, vertical: 10),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF3E1805),
+                                  color: Colors.white,
                                   borderRadius: BorderRadius.circular(14),
                                   border: Border.all(
-                                    color: const Color(0xFFFBBF24),
-                                    width: 1.6,
+                                    color: const Color(0xFFE5E7EB),
+                                    width: 1.5,
                                   ),
+                                  boxShadow: const [
+                                    BoxShadow(
+                                      color: Color(0x40000000),
+                                      blurRadius: 10,
+                                      offset: Offset(0, 4),
+                                    ),
+                                  ],
                                 ),
-                                child: const Row(
+                                child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Icon(
-                                      Icons.login_rounded,
-                                      color: Color(0xFFFEF08A),
-                                      size: 16,
+                                    SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CustomPaint(
+                                        painter: GoogleLogoPainter(),
+                                      ),
                                     ),
-                                    SizedBox(width: 7),
-                                    Flexible(
+                                    const SizedBox(width: 10),
+                                    const Flexible(
                                       child: FittedBox(
                                         fit: BoxFit.scaleDown,
                                         child: Text(
                                           'Already have an account? Log in with Google',
                                           maxLines: 1,
                                           style: TextStyle(
-                                            color: Color(0xFFFEF08A),
+                                            color: Color(0xFF1F2937),
                                             fontFamily: 'Fredoka',
-                                            fontWeight: FontWeight.w700,
-                                            fontSize: 13,
+                                            fontWeight: FontWeight.w800,
+                                            fontSize: 13.5,
+                                            letterSpacing: 0.2,
                                             decoration: TextDecoration.none,
                                           ),
                                         ),

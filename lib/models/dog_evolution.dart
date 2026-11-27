@@ -1,6 +1,73 @@
 import 'dart:math';
 import 'dog_model.dart';
 
+enum DogRarityTier {
+  common,
+  uncommon,
+  rare,
+  epic,
+  legendary,
+}
+
+extension DogRarityInfo on DogRarityTier {
+  String get label {
+    switch (this) {
+      case DogRarityTier.common:
+        return 'Common';
+      case DogRarityTier.uncommon:
+        return 'Uncommon';
+      case DogRarityTier.rare:
+        return 'Rare';
+      case DogRarityTier.epic:
+        return 'Epic';
+      case DogRarityTier.legendary:
+        return 'Legendary';
+    }
+  }
+
+  /// Duration of the breeding process in the Breeding Den (seconds).
+  int get breedingDurationSeconds {
+    switch (this) {
+      case DogRarityTier.common:
+        return 120; // 2 minutes
+      case DogRarityTier.uncommon:
+        return 600; // 10 minutes
+      case DogRarityTier.rare:
+        return 1800; // 30 minutes
+      case DogRarityTier.epic:
+        return 5400; // 1.5 hours
+      case DogRarityTier.legendary:
+        return 14400; // 4 hours
+    }
+  }
+
+  /// Individual parent recovery cooldown after breeding (seconds).
+  int get breedingRecoverySeconds {
+    switch (this) {
+      case DogRarityTier.common:
+        return 12 * 3600; // 12 hours
+      case DogRarityTier.uncommon:
+        return 24 * 3600; // 24 hours
+      case DogRarityTier.rare:
+        return 2 * 24 * 3600; // 2 days
+      case DogRarityTier.epic:
+        return 3 * 24 * 3600; // 3 days
+      case DogRarityTier.legendary:
+        return 7 * 24 * 3600; // 7 days
+    }
+  }
+
+  String get formattedRecovery {
+    final secs = breedingRecoverySeconds;
+    if (secs >= 86400) {
+      final days = secs ~/ 86400;
+      return '$days ${days == 1 ? 'day' : 'days'}';
+    }
+    final hrs = secs ~/ 3600;
+    return '$hrs hours';
+  }
+}
+
 class DogStageInfo {
   final int level;
   final String stage;
@@ -63,6 +130,45 @@ class DogStageInfo {
     return 'Bulldog';
   }
 
+  static DogRarityTier getRarityForBreed(String breedId) {
+    final b = breedId.toLowerCase();
+    if (b.contains('astral') || b.contains('chronos')) {
+      return DogRarityTier.legendary;
+    }
+    if (b.contains('german') ||
+        b.contains('shepherd') ||
+        b.contains('pharaoh') ||
+        b.contains('golden') ||
+        b.contains('labrador')) {
+      return DogRarityTier.epic;
+    }
+    if (b.contains('beagle') || b.contains('shiba')) {
+      return DogRarityTier.rare;
+    }
+    if (b.contains('husky') || b.contains('samoyed')) {
+      return DogRarityTier.uncommon;
+    }
+    return DogRarityTier.common;
+  }
+
+  static String formatDuration(int totalSeconds) {
+    if (totalSeconds <= 0) return '0s';
+    final days = totalSeconds ~/ 86400;
+    final hours = (totalSeconds % 86400) ~/ 3600;
+    final minutes = (totalSeconds % 3600) ~/ 60;
+    final seconds = totalSeconds % 60;
+    if (days > 0) {
+      return hours > 0 ? '${days}d ${hours}h' : '${days}d';
+    }
+    if (hours > 0) {
+      return '${hours}h ${minutes.toString().padLeft(2, '0')}m';
+    }
+    if (minutes > 0) {
+      return '${minutes}m ${seconds.toString().padLeft(2, '0')}s';
+    }
+    return '${seconds}s';
+  }
+
   static String getBreedDisplayName(String breedId) {
     final b = breedId.toLowerCase();
     if (b.contains('astral')) return 'Astral Hound';
@@ -91,7 +197,7 @@ class DogStageInfo {
     if (level >= 12) {
       stage = 'Adult';
       stageLabel = 'Adult';
-    } else if (level >= 4) {
+    } else if (level >= 6) {
       stage = 'Young';
       stageLabel = 'Young Pup';
     }
@@ -116,7 +222,7 @@ class DogStageInfo {
     final description =
         'A wonderful, devoted companion thriving in Dogtopia sanctuary.';
 
-    final evolutionLore = level == 4
+    final evolutionLore = level == 6
         ? 'Incredible! Your companion transformed into a swift and spirited Young Pup! Strength and coin output increased!'
         : (level == 12
               ? 'Magnificent! Your companion reached full maturity as a majestic Adult Dog! Maximum Element mastery unlocked!'
@@ -142,7 +248,7 @@ class DogStageInfo {
       defaultName: defaultName,
       description: description,
       evolutionLore: evolutionLore,
-      isEvolutionLevel: level == 4 || level == 12,
+      isEvolutionLevel: level == 6 || level == 12,
     );
   }
 }

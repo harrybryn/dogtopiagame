@@ -117,7 +117,7 @@ class WalkthroughStep {
       requiredRoute: 'habitat',
       targetKeyId: WalkthroughTargets.careFeedButton,
       highlightAreaKeyId: WalkthroughTargets.careDogStation,
-      arrowDirection: WalkthroughArrowDirection.left,
+      arrowDirection: WalkthroughArrowDirection.down,
       requireAction: true,
     ),
     WalkthroughStep(
@@ -205,9 +205,10 @@ class WalkthroughStep {
       id: WalkthroughStepId.shopAndGoals,
       title: 'BUILD & DAILY GOALS',
       message:
-          'Use BUILD to buy new habitats, facilities, and dogs — and check GOALS on the left for bonus rewards!',
+          'Tap BUILD to browse new habitats, facilities, and dogs — and check GOALS on the left for bonus rewards!',
       requiredRoute: 'world',
       targetKeyId: WalkthroughTargets.hudBuild,
+      arrowDirection: WalkthroughArrowDirection.down,
       ctaLabel: 'NEXT',
     ),
     WalkthroughStep(

@@ -21,6 +21,7 @@ import '../components/world/settings_dialog.dart';
 import '../components/world/habitat_info_dialog.dart';
 import '../components/common/generic_modal.dart';
 import '../models/obstacle_model.dart';
+import '../services/audio_service.dart';
 import 'breeding_page.dart';
 
 class WorldViewPage extends StatefulWidget {
@@ -77,6 +78,7 @@ class _WorldViewPageState extends State<WorldViewPage>
   DogCatalogItem? _adoptingDogItem;
   DogModel? _transferringDog;
   String? _transferFromHabitatId;
+  Map<String, String>? _placingBredPuppy;
   String? _hudToast;
   String? _lastWalkthroughCenteredHabId;
 
@@ -101,6 +103,7 @@ class _WorldViewPageState extends State<WorldViewPage>
       _overviewCamY = 0.0;
       _overviewZoom = 1.0;
     });
+    widget.game.setIslandOverviewOpen(true);
     _overviewController.forward();
   }
 
@@ -108,6 +111,7 @@ class _WorldViewPageState extends State<WorldViewPage>
     await _overviewController.reverse();
     if (mounted) {
       setState(() => _isIslandOverview = false);
+      widget.game.setIslandOverviewOpen(false);
     }
   }
 
@@ -128,6 +132,58 @@ class _WorldViewPageState extends State<WorldViewPage>
           _transferringDog = dog;
           _transferFromHabitatId = fromHabId;
           _adoptingDogItem = null;
+          _placingBredPuppy = null;
+          _placingItem = null;
+          _movingHabitatId = null;
+        });
+      }
+    } else if (args != null && args.containsKey('placeBredPuppy')) {
+      final raw = args['placeBredPuppy'];
+      if (raw is Map) {
+        final pup = Map<String, String>.from(raw);
+        final breedId = pup['breedId'] ?? '';
+        final element = pup['element'] ?? '';
+        // If no compatible open habitat is on the current island, switch to an unlocked island that has one
+        final hasOnCurrent = widget.game.placedHabitats.any(
+          (h) =>
+              h.islandId == widget.game.currentIslandId &&
+              h.type == 'habitat' &&
+              !h.underConstruction &&
+              h.dogs.length < 4 &&
+              HabitatCatalog.isHabitatCompatible(
+                habitatCatalogId: h.habitatId,
+                breedId: breedId,
+                element: element,
+              ),
+        );
+        if (!hasOnCurrent) {
+          final targetHab = widget.game.placedHabitats.firstWhere(
+            (h) =>
+                h.type == 'habitat' &&
+                !h.underConstruction &&
+                h.dogs.length < 4 &&
+                HabitatCatalog.isHabitatCompatible(
+                  habitatCatalogId: h.habitatId,
+                  breedId: breedId,
+                  element: element,
+                ),
+            orElse: () => HabitatModel(
+              id: '',
+              habitatId: '',
+              name: '',
+              col: 0,
+              row: 0,
+            ),
+          );
+          if (targetHab.id.isNotEmpty) {
+            widget.game.switchIsland(targetHab.islandId);
+          }
+        }
+        setState(() {
+          _placingBredPuppy = pup;
+          _adoptingDogItem = null;
+          _transferringDog = null;
+          _transferFromHabitatId = null;
           _placingItem = null;
           _movingHabitatId = null;
         });
@@ -141,7 +197,9 @@ class _WorldViewPageState extends State<WorldViewPage>
       return widget.game.placedHabitats
           .where(
             (h) =>
+                h.islandId == widget.game.currentIslandId &&
                 h.type == 'habitat' &&
+                !h.underConstruction &&
                 h.dogs.length < 4 &&
                 HabitatCatalog.isHabitatCompatible(
                   habitatCatalogId: h.habitatId,
@@ -157,13 +215,32 @@ class _WorldViewPageState extends State<WorldViewPage>
       return widget.game.placedHabitats
           .where(
             (h) =>
+                h.islandId == widget.game.currentIslandId &&
                 h.type == 'habitat' &&
+                !h.underConstruction &&
                 h.id != _transferFromHabitatId &&
                 h.dogs.length < 4 &&
                 HabitatCatalog.isHabitatCompatible(
                   habitatCatalogId: h.habitatId,
                   breedId: dog.breedId,
                   element: dog.element,
+                ),
+          )
+          .map((h) => h.id)
+          .toSet();
+    } else if (_placingBredPuppy != null) {
+      final pup = _placingBredPuppy!;
+      return widget.game.placedHabitats
+          .where(
+            (h) =>
+                h.islandId == widget.game.currentIslandId &&
+                h.type == 'habitat' &&
+                !h.underConstruction &&
+                h.dogs.length < 4 &&
+                HabitatCatalog.isHabitatCompatible(
+                  habitatCatalogId: h.habitatId,
+                  breedId: pup['breedId'],
+                  element: pup['element'],
                 ),
           )
           .map((h) => h.id)
@@ -195,6 +272,16 @@ class _WorldViewPageState extends State<WorldViewPage>
       setState(() {
         _transferringDog = null;
         _transferFromHabitatId = null;
+      });
+    } else if (_placingBredPuppy != null) {
+      final pup = _placingBredPuppy!;
+      final placedName = widget.game.claimBredPuppyToHabitat(hab.id);
+      if (placedName != null) {
+        SoundManager.instance.playQuestReward();
+        _showHudToast('${pup['breedName'] ?? 'Bred'} Pup placed in $placedName!');
+      }
+      setState(() {
+        _placingBredPuppy = null;
       });
     }
   }
@@ -249,7 +336,9 @@ class _WorldViewPageState extends State<WorldViewPage>
   Widget build(BuildContext context) {
     final isPlacing = _placingItem != null || _movingHabitatId != null;
     final isSelectingHabitat =
-        _adoptingDogItem != null || _transferringDog != null;
+        _adoptingDogItem != null ||
+        _transferringDog != null ||
+        _placingBredPuppy != null;
     final compatibleHabitatIds = isSelectingHabitat
         ? _getCompatibleHabitatIds()
         : <String>{};
@@ -559,8 +648,54 @@ class _WorldViewPageState extends State<WorldViewPage>
                                                       isSelectingHabitat,
                                                   highlightedHabitatIds:
                                                       compatibleHabitatIds,
+                                                  activeBreeding: widget
+                                                      .game
+                                                      .activeBreeding,
+                                                  onOpenBreeding: () =>
+                                                      widget.onNavigate(
+                                                        'breeding',
+                                                      ),
                                                   onSelectTargetHabitat:
                                                       _handleTargetHabitatSelected,
+                                                  onTapIncompatibleHabitat: (hab) {
+                                                    if (hab.underConstruction) {
+                                                      _showLotToast(
+                                                        message:
+                                                            '${hab.name} is still under construction!',
+                                                        isError: true,
+                                                      );
+                                                    } else if (hab.dogs.length >= 4) {
+                                                      _showLotToast(
+                                                        message:
+                                                            '${hab.name} is full (4/4 dogs)!',
+                                                        isError: true,
+                                                      );
+                                                    } else {
+                                                      final breedId =
+                                                          _adoptingDogItem?.id ??
+                                                              _transferringDog
+                                                                  ?.breedId ??
+                                                              _placingBredPuppy?[
+                                                                  'breedId'];
+                                                      final element =
+                                                          _adoptingDogItem
+                                                                  ?.element ??
+                                                              _transferringDog
+                                                                  ?.element ??
+                                                              _placingBredPuppy?[
+                                                                  'element'];
+                                                      final reqHab = HabitatCatalog
+                                                          .requiredHabitatNameForDog(
+                                                        breedId: breedId,
+                                                        element: element,
+                                                      );
+                                                      _showLotToast(
+                                                        message:
+                                                            'Incompatible! Requires a $reqHab habitat.',
+                                                        isError: true,
+                                                      );
+                                                    }
+                                                  },
                                                   onSelectHabitat: (hab) {
                                                     if (!isPlacing &&
                                                         !isSelectingHabitat) {
@@ -683,6 +818,7 @@ class _WorldViewPageState extends State<WorldViewPage>
                                     game: widget.game,
                                     walkthroughKeys: widget.walkthroughKeys,
                                     onOpenBuild: () {
+                                      widget.game.setShopDialogOpen(true);
                                       showDialog(
                                         context: context,
                                         builder: (_) => BuildShopDialog(
@@ -701,7 +837,11 @@ class _WorldViewPageState extends State<WorldViewPage>
                                           onAdoptDog: (dog, habId) =>
                                               widget.game.adoptDog(dog, habId),
                                         ),
-                                      );
+                                      ).then((_) {
+                                        widget.game.setShopDialogOpen(false);
+                                        widget.game
+                                            .markWalkthroughShopVisited();
+                                      });
                                     },
                                     onOpenGoals: () {
                                       showDialog(
@@ -718,6 +858,7 @@ class _WorldViewPageState extends State<WorldViewPage>
                                       );
                                     },
                                     onOpenSocial: () {
+                                      widget.game.setSocialDialogOpen(true);
                                       showDialog(
                                         context: context,
                                         builder: (_) => SocialDialog(
@@ -734,8 +875,20 @@ class _WorldViewPageState extends State<WorldViewPage>
                                               },
                                             );
                                           },
+                                          onOpenSettings: () {
+                                            showDialog(
+                                              context: context,
+                                              builder: (_) => SettingsDialog(
+                                                game: widget.game,
+                                              ),
+                                            );
+                                          },
                                         ),
-                                      );
+                                      ).then((_) {
+                                        widget.game.setSocialDialogOpen(false);
+                                        widget.game
+                                            .markWalkthroughSocialVisited();
+                                      });
                                     },
                                     onOpenRanking: () {
                                       showDialog(
@@ -757,13 +910,8 @@ class _WorldViewPageState extends State<WorldViewPage>
                                             InboxDialog(game: widget.game),
                                       );
                                     },
-                                    onOpenBreeding: () {
-                                      showDialog(
-                                        context: context,
-                                        builder: (_) =>
-                                            BreedingDialog(game: widget.game),
-                                      );
-                                    },
+                                    onOpenBreeding: () =>
+                                        widget.onNavigate('breeding'),
                                     onOpenCollection: () =>
                                         widget.onNavigate('collection'),
                                     onOpenIslands: _openIslandOverview,
@@ -776,11 +924,7 @@ class _WorldViewPageState extends State<WorldViewPage>
                                       } else if (hab.habitatId
                                           .toLowerCase()
                                           .contains('breeding')) {
-                                        showDialog(
-                                          context: context,
-                                          builder: (_) =>
-                                              BreedingDialog(game: widget.game),
-                                        );
+                                        widget.onNavigate('breeding');
                                       } else {
                                         widget.onNavigate(
                                           'habitat',
@@ -1387,12 +1531,18 @@ class _WorldViewPageState extends State<WorldViewPage>
 
   Widget _buildHabitatSelectionPromptHeader() {
     final isAdopting = _adoptingDogItem != null;
+    final isPlacingBred = _placingBredPuppy != null;
     final dogName = isAdopting
         ? _adoptingDogItem!.name
-        : _transferringDog!.name;
+        : (isPlacingBred
+            ? '${_placingBredPuppy!['breedName'] ?? 'Bred'} Pup'
+            : _transferringDog!.name);
     final dogThumb = isAdopting
         ? _adoptingDogItem!.assetImage
-        : DogStageInfo.getInfo(_transferringDog!).portraitImg;
+        : (isPlacingBred
+            ? (_placingBredPuppy!['sitImg'] ??
+                'assets/itemsInShop/dogs/BulldogPuppySit.png')
+            : DogStageInfo.getInfo(_transferringDog!).portraitImg);
 
     return Positioned(
       top: 20,
@@ -1447,7 +1597,7 @@ class _WorldViewPageState extends State<WorldViewPage>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        isAdopting
+                        (isAdopting || isPlacingBred)
                             ? 'SELECT HABITAT FOR ${dogName.toUpperCase()}'
                             : 'TRANSFER ${dogName.toUpperCase()}',
                         style: const TextStyle(
@@ -1478,6 +1628,7 @@ class _WorldViewPageState extends State<WorldViewPage>
                         _adoptingDogItem = null;
                         _transferringDog = null;
                         _transferFromHabitatId = null;
+                        _placingBredPuppy = null;
                       });
                     },
                     child: Container(

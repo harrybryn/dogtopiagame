@@ -435,7 +435,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
                 shape: BoxShape.circle,
               ),
               padding: const EdgeInsets.all(6),
-              child: CustomPaint(painter: _GoogleLogoPainter()),
+              child: CustomPaint(painter: GoogleLogoPainter()),
             ),
             const SizedBox(width: 10),
             const Text(
@@ -890,7 +890,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
                         SizedBox(
                           width: compact ? 16 : 20,
                           height: compact ? 16 : 20,
-                          child: CustomPaint(painter: _GoogleLogoPainter()),
+                          child: CustomPaint(painter: GoogleLogoPainter()),
                         ),
                         SizedBox(width: compact ? 7 : 11),
                         const Flexible(
@@ -1271,7 +1271,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
   }
 }
 
-class _GoogleLogoPainter extends CustomPainter {
+class GoogleLogoPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final stroke = size.width * 0.21;

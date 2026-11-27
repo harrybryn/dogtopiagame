@@ -13,10 +13,10 @@ class HabitatModel {
   final int sizeH;
   List<DogModel> dogs;
   int coinsAccumulated;
-  final int maxCoins;
+  int maxCoins;
   bool readyToCollect;
   int dogfoodAccumulated;
-  final int maxDogfood;
+  int maxDogfood;
   bool readyToCollectDogfood;
   int lastCollectTime;
   bool underConstruction;

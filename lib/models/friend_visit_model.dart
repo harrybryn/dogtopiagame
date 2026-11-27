@@ -93,7 +93,7 @@ class MockFriend {
       level: level,
       feedProgress: feedProgress,
       feedRequired: 4,
-      stage: level >= 12 ? 'Adult' : (level >= 4 ? 'Young' : 'Puppy'),
+      stage: level >= 12 ? 'Adult' : (level >= 6 ? 'Young' : 'Puppy'),
       element: element,
       habitatId: habitatId,
       habitatName: habitatName,

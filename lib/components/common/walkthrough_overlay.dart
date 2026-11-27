@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import '../../models/walkthrough_step.dart';
+import '../../services/wizard_voice_service.dart';
 import '../../state/game_controller.dart';
 import 'hover_scale.dart';
 
@@ -30,9 +32,20 @@ class _WalkthroughOverlayState extends State<WalkthroughOverlay>
   late final AnimationController _spotlightTransitionController;
   Rect? _measuredKeyRect;
   Rect? _measuredHighlightRect;
+  Rect? _measuredNextRect;
+  final Map<WalkthroughStepId, GlobalKey> _nextButtonKeys = {};
   Rect? _fromSpotlightRect;
   Rect? _toSpotlightRect;
   WalkthroughStepId? _lastStepId;
+  WalkthroughStepId? _spokenStepId;
+  Set<WalkthroughStepId>? _spokenSteps;
+  Set<WalkthroughStepId> get _safeSpokenSteps => _spokenSteps ??= {};
+  int _activeWordIndex = -1;
+  bool _sawSpeechBoundary = false;
+  Timer? _immersiveTimer;
+
+  GlobalKey _nextButtonKeyFor(WalkthroughStepId id) =>
+      _nextButtonKeys.putIfAbsent(id, GlobalKey.new);
 
   @override
   void initState() {
@@ -68,10 +81,170 @@ class _WalkthroughOverlayState extends State<WalkthroughOverlay>
 
   @override
   void dispose() {
+    _immersiveTimer?.cancel();
+    WizardVoiceService.instance.stop();
     widget.worldTargetRectNotifier.removeListener(_onWorldRectChanged);
     _bobController.dispose();
     _spotlightTransitionController.dispose();
     super.dispose();
+  }
+
+  void _syncStepVoice(WalkthroughStep? step, bool hidden) {
+    if (hidden || step == null) {
+      if (_spokenStepId != null) {
+        _spokenStepId = null;
+        _immersiveTimer?.cancel();
+        WizardVoiceService.instance.stop();
+      }
+      return;
+    }
+    if (_spokenStepId != step.id && !_safeSpokenSteps.contains(step.id)) {
+      _spokenStepId = step.id;
+      _safeSpokenSteps.add(step.id);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _startImmersiveReading(step);
+      });
+    }
+  }
+
+  void _startImmersiveReading(WalkthroughStep step) {
+    _immersiveTimer?.cancel();
+    WizardVoiceService.instance.stop();
+    final text = _personalizedMessage(step);
+    final matches = RegExp(r'\S+').allMatches(text).toList();
+    if (matches.isEmpty) {
+      setState(() => _activeWordIndex = -1);
+      return;
+    }
+
+    if (!WizardVoiceService.instance.enabled) {
+      setState(() => _activeWordIndex = -1);
+      return;
+    }
+
+    _sawSpeechBoundary = false;
+    setState(() => _activeWordIndex = 0);
+
+    WizardVoiceService.instance.speak(
+      text,
+      onBoundary: (charIdx) {
+        if (!mounted) return;
+        _sawSpeechBoundary = true;
+        int found = 0;
+        for (int i = 0; i < matches.length; i++) {
+          if (charIdx >= matches[i].start) {
+            found = i;
+          } else {
+            break;
+          }
+        }
+        if (found != _activeWordIndex) {
+          setState(() => _activeWordIndex = found);
+        }
+      },
+      onComplete: () {
+        _immersiveTimer?.cancel();
+        if (mounted) setState(() => _activeWordIndex = -1);
+      },
+    );
+
+    _immersiveTimer = Timer.periodic(const Duration(milliseconds: 260), (t) {
+      if (!mounted) {
+        t.cancel();
+        return;
+      }
+      if (_sawSpeechBoundary) return;
+      if (_activeWordIndex + 1 < matches.length) {
+        setState(() => _activeWordIndex += 1);
+      } else {
+        t.cancel();
+        setState(() => _activeWordIndex = -1);
+      }
+    });
+  }
+
+  Widget _buildImmersiveText(
+    String text, {
+    required TextStyle baseStyle,
+    TextAlign textAlign = TextAlign.start,
+  }) {
+    if (_activeWordIndex < 0) {
+      return Text(text, textAlign: textAlign, style: baseStyle);
+    }
+    final matches = RegExp(r'\S+').allMatches(text).toList();
+    if (matches.isEmpty) {
+      return Text(text, textAlign: textAlign, style: baseStyle);
+    }
+
+    final spans = <InlineSpan>[];
+    int cursor = 0;
+    for (int i = 0; i < matches.length; i++) {
+      final m = matches[i];
+      if (m.start > cursor) {
+        spans.add(TextSpan(text: text.substring(cursor, m.start)));
+      }
+      final word = text.substring(m.start, m.end);
+      final isCurrent = i == _activeWordIndex;
+      final isUpcoming = i > _activeWordIndex;
+      spans.add(
+        TextSpan(
+          text: word,
+          style: isCurrent
+              ? baseStyle.copyWith(
+                  color: const Color(0xFF7C2D12),
+                  backgroundColor: const Color(0xAAFDE047),
+                  fontWeight: FontWeight.w900,
+                )
+              : (isUpcoming
+                  ? baseStyle.copyWith(color: const Color(0xAA3B1404))
+                  : baseStyle),
+        ),
+      );
+      cursor = m.end;
+    }
+    if (cursor < text.length) {
+      spans.add(TextSpan(text: text.substring(cursor)));
+    }
+
+    return Text.rich(
+      TextSpan(style: baseStyle, children: spans),
+      textAlign: textAlign,
+    );
+  }
+
+  Widget _buildVoiceToggleChip(WalkthroughStep step) {
+    final enabled = WizardVoiceService.instance.enabled;
+    return HoverScale(
+      scale: 1.08,
+      onTap: () {
+        setState(() {
+          WizardVoiceService.instance.enabled = !enabled;
+          if (WizardVoiceService.instance.enabled) {
+            _startImmersiveReading(step);
+          } else {
+            _immersiveTimer?.cancel();
+            WizardVoiceService.instance.stop();
+            _activeWordIndex = -1;
+          }
+        });
+      },
+      tooltip: enabled ? 'Mute Wizard Voice' : 'Read Aloud',
+      child: Container(
+        padding: const EdgeInsets.all(5),
+        decoration: BoxDecoration(
+          color: enabled
+              ? const Color(0x33D97706)
+              : const Color(0x2678350F),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: const Color(0x8078350F), width: 1.3),
+        ),
+        child: Icon(
+          enabled ? Icons.volume_up_rounded : Icons.volume_off_rounded,
+          size: 16,
+          color: const Color(0xFF78350F),
+        ),
+      ),
+    );
   }
 
   void _scheduleMeasure() {
@@ -81,9 +254,7 @@ class _WalkthroughOverlayState extends State<WalkthroughOverlay>
     });
   }
 
-  Rect? _measureKey(String? keyId) {
-    if (keyId == null) return null;
-    final key = widget.targetKeys[keyId];
+  Rect? _measureGlobalKey(GlobalKey? key) {
     final ctx = key?.currentContext;
     if (ctx == null) return null;
     final renderObj = ctx.findRenderObject();
@@ -91,6 +262,11 @@ class _WalkthroughOverlayState extends State<WalkthroughOverlay>
       return renderObj.localToGlobal(Offset.zero) & renderObj.size;
     }
     return null;
+  }
+
+  Rect? _measureKey(String? keyId) {
+    if (keyId == null) return null;
+    return _measureGlobalKey(widget.targetKeys[keyId]);
   }
 
   bool _rectsDiffer(Rect? a, Rect? b) {
@@ -119,6 +295,7 @@ class _WalkthroughOverlayState extends State<WalkthroughOverlay>
     final highlightRect = step.highlightAreaKeyId != null
         ? _measureKey(step.highlightAreaKeyId)
         : targetRect;
+    final nextRect = _measureGlobalKey(_nextButtonKeys[step.id]);
 
     if ((step.targetKeyId != null && targetRect == null) ||
         (step.highlightAreaKeyId != null && highlightRect == null)) {
@@ -128,10 +305,12 @@ class _WalkthroughOverlayState extends State<WalkthroughOverlay>
     }
 
     if (_rectsDiffer(_measuredKeyRect, targetRect) ||
-        _rectsDiffer(_measuredHighlightRect, highlightRect)) {
+        _rectsDiffer(_measuredHighlightRect, highlightRect) ||
+        _rectsDiffer(_measuredNextRect, nextRect)) {
       setState(() {
         _measuredKeyRect = targetRect;
         _measuredHighlightRect = highlightRect;
+        _measuredNextRect = nextRect;
       });
     }
   }
@@ -192,8 +371,17 @@ class _WalkthroughOverlayState extends State<WalkthroughOverlay>
 
   @override
   Widget build(BuildContext context) {
-    final step = widget.game.currentWalkthroughStep;
-    if (step == null) return const SizedBox.shrink();
+    final hidden = widget.game.isIslandOverviewOpen ||
+        widget.game.isShopDialogOpen ||
+        widget.game.isSocialDialogOpen;
+    final step = hidden ? null : widget.game.currentWalkthroughStep;
+    final isStepVisible = !hidden &&
+        step != null &&
+        (step.isCenterModal || widget.currentRoute == step.requiredRoute);
+    _syncStepVoice(step, !isStepVisible);
+    if (hidden || step == null) {
+      return const SizedBox.shrink();
+    }
 
     final screenSize = MediaQuery.sizeOf(context);
     _scheduleMeasure();
@@ -231,7 +419,12 @@ class _WalkthroughOverlayState extends State<WalkthroughOverlay>
     final actionRect = _resolveActionRect(step, screenSize) ?? spotlightRect;
     _syncSpotlightAnimation(step, spotlightRect);
 
-    final allowPassthrough = step.requireAction && actionRect != null;
+    final Rect? passthroughRect = step.requireAction
+        ? actionRect
+        : (step.arrowDirection != WalkthroughArrowDirection.none
+            ? (step.highlightAreaKeyId != null ? spotlightRect : actionRect)
+            : null);
+    final allowPassthrough = passthroughRect != null;
     final showNextFallback =
         !step.requireAction || widget.game.canBypassCurrentWalkthroughStep;
 
@@ -259,6 +452,28 @@ class _WalkthroughOverlayState extends State<WalkthroughOverlay>
       bannerMaxWidth = 780.0;
     }
 
+    final bool hasCompletedOptionalAction =
+        (step.id == WalkthroughStepId.batheDog &&
+            widget.game.walkthroughCareCompleted) ||
+        (step.id == WalkthroughStepId.shopAndGoals &&
+            widget.game.walkthroughShopVisited) ||
+        (step.id == WalkthroughStepId.exploreIslands &&
+            widget.game.walkthroughIslandsVisited) ||
+        (step.id == WalkthroughStepId.socialAndProgress &&
+            widget.game.walkthroughSocialVisited);
+
+    final bool noActionToDo =
+        step.arrowDirection == WalkthroughArrowDirection.none ||
+        (step.requireAction && widget.game.canBypassCurrentWalkthroughStep);
+
+    final bool pointAtNext =
+        showNextFallback &&
+        (hasCompletedOptionalAction || noActionToDo) &&
+        _measuredNextRect != null;
+    final Rect? arrowTargetRect = pointAtNext ? _measuredNextRect : actionRect;
+    final WalkthroughArrowDirection arrowDir =
+        pointAtNext ? WalkthroughArrowDirection.down : step.arrowDirection;
+
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -279,7 +494,7 @@ class _WalkthroughOverlayState extends State<WalkthroughOverlay>
 
         // 2. Tap blockers outside the clickable action target (or full screen if info-only step)
         if (allowPassthrough)
-          ..._buildPassthroughBlockers(actionRect, screenSize)
+          ..._buildPassthroughBlockers(passthroughRect, screenSize)
         else
           Positioned.fill(
             child: GestureDetector(
@@ -288,12 +503,7 @@ class _WalkthroughOverlayState extends State<WalkthroughOverlay>
             ),
           ),
 
-        // 3. Smoothly gliding, bouncing GenericArrow pointing directly at the action target
-        if (actionRect != null &&
-            step.arrowDirection != WalkthroughArrowDirection.none)
-          _buildBouncingArrow(actionRect, step.arrowDirection, screenSize),
-
-        // 4. Smoothly positioned Dog Wizard Dialogue Bar
+        // 3. Smoothly positioned Dog Wizard Dialogue Bar
         AnimatedAlign(
           duration: const Duration(milliseconds: 380),
           curve: Curves.easeOutCubic,
@@ -327,6 +537,11 @@ class _WalkthroughOverlayState extends State<WalkthroughOverlay>
             ),
           ),
         ),
+
+        // 4. Smoothly gliding, bouncing GenericArrow pointing directly at the action target (or NEXT after task completion)
+        if (arrowTargetRect != null &&
+            arrowDir != WalkthroughArrowDirection.none)
+          _buildBouncingArrow(arrowTargetRect, arrowDir, screenSize),
       ],
     );
   }
@@ -495,35 +710,42 @@ class _WalkthroughOverlayState extends State<WalkthroughOverlay>
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header: Title + Step Counter + Skip
+              // Header: Title + Step Counter + Voice + Skip
               Row(
                 children: [
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF0F766E), Color(0xFF115E59)],
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                      border:
-                          Border.all(color: const Color(0xFFFBBF24), width: 1.8),
-                    ),
-                    child: Text(
-                      step.title,
-                      style: const TextStyle(
-                        color: Color(0xFFFEF08A),
-                        fontFamily: 'Lilita One',
-                        fontSize: 16,
-                        letterSpacing: 0.7,
-                        decoration: TextDecoration.none,
+                  Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 5),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF0F766E), Color(0xFF115E59)],
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                              color: const Color(0xFFFBBF24), width: 1.8),
+                        ),
+                        child: Text(
+                          step.title,
+                          maxLines: 1,
+                          style: const TextStyle(
+                            color: Color(0xFFFEF08A),
+                            fontFamily: 'Lilita One',
+                            fontSize: 15,
+                            letterSpacing: 0.7,
+                            decoration: TextDecoration.none,
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 6),
                   Container(
                     padding:
-                        const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
                       color: const Color(0x26B45309),
                       borderRadius: BorderRadius.circular(10),
@@ -533,12 +755,14 @@ class _WalkthroughOverlayState extends State<WalkthroughOverlay>
                       style: const TextStyle(
                         color: Color(0xFF78350F),
                         fontFamily: 'Lilita One',
-                        fontSize: 12.5,
+                        fontSize: 11.5,
                         decoration: TextDecoration.none,
                       ),
                     ),
                   ),
-                  const Spacer(),
+                  const SizedBox(width: 6),
+                  _buildVoiceToggleChip(step),
+                  const SizedBox(width: 6),
                   HoverScale(
                     scale: 1.08,
                     onTap: widget.game.skipWalkthrough,
@@ -573,9 +797,9 @@ class _WalkthroughOverlayState extends State<WalkthroughOverlay>
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Expanded(
-                    child: Text(
-                      step.message,
-                      style: const TextStyle(
+                    child: _buildImmersiveText(
+                      _personalizedMessage(step),
+                      baseStyle: const TextStyle(
                         color: Color(0xFF3B1404),
                         fontFamily: 'Fredoka',
                         fontWeight: FontWeight.w700,
@@ -587,9 +811,12 @@ class _WalkthroughOverlayState extends State<WalkthroughOverlay>
                   ),
                   if (showNextButton) ...[
                     const SizedBox(width: 16),
-                    _buildPrimaryCtaButton(
-                      label: step.ctaLabel ?? 'NEXT',
-                      onTap: widget.game.advanceWalkthrough,
+                    KeyedSubtree(
+                      key: _nextButtonKeyFor(step.id),
+                      child: _buildPrimaryCtaButton(
+                        label: step.ctaLabel ?? 'NEXT',
+                        onTap: widget.game.advanceWalkthrough,
+                      ),
                     ),
                   ],
                 ],
@@ -727,10 +954,10 @@ class _WalkthroughOverlayState extends State<WalkthroughOverlay>
                       const SizedBox(height: 16),
 
                       // Message
-                      Text(
+                      _buildImmersiveText(
                         _personalizedMessage(step),
                         textAlign: TextAlign.center,
-                        style: const TextStyle(
+                        baseStyle: const TextStyle(
                           color: Color(0xFF3B1404),
                           fontFamily: 'Fredoka',
                           fontWeight: FontWeight.w700,

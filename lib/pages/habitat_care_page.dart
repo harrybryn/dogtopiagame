@@ -95,10 +95,19 @@ class _HabitatCarePageState extends State<HabitatCarePage>
     super.dispose();
   }
 
+  HabitatModel get _liveHabitat {
+    if (widget.isVisitMode) return widget.habitat;
+    for (final h in widget.game.placedHabitats) {
+      if (h.id == widget.habitat.id) return h;
+    }
+    return widget.habitat;
+  }
+
   DogModel? get _currentDog {
-    if (widget.habitat.dogs.isEmpty) return null;
-    final idx = _selectedDogIndex.clamp(0, widget.habitat.dogs.length - 1);
-    return widget.habitat.dogs[idx];
+    final hab = _liveHabitat;
+    if (hab.dogs.isEmpty) return null;
+    final idx = _selectedDogIndex.clamp(0, hab.dogs.length - 1);
+    return hab.dogs[idx];
   }
 
   String _getInsideBackground() {
@@ -289,7 +298,7 @@ class _HabitatCarePageState extends State<HabitatCarePage>
       dog.level += 1;
       if (dog.level >= 12) {
         dog.stage = 'Adult';
-      } else if (dog.level >= 4) {
+      } else if (dog.level >= 6) {
         dog.stage = 'Young';
       }
     }
@@ -328,17 +337,28 @@ class _HabitatCarePageState extends State<HabitatCarePage>
       return;
     }
 
+    final hab = _liveHabitat;
     for (int i = 0; i < steps; i++) {
-      final prevLevel = dog.level;
-      final success = widget.game.feedDog(widget.habitat.id, dog.id);
+      final liveDog = _currentDog;
+      if (liveDog == null) break;
+      final stepInfo = DogStageInfo.getInfo(liveDog);
+      if (widget.game.kibble < stepInfo.kibbleCostPerFeed) {
+        if (!fedAny) {
+          _showToast(
+            'Not enough Kibble! Need ${stepInfo.kibbleCostPerFeed} Kibble.',
+          );
+        }
+        break;
+      }
+      final prevLevel = liveDog.level;
+      final success = widget.game.feedDog(hab.id, liveDog.id);
       if (!success) {
-        _showToast('Not enough Kibble! Produce more in the Kibble Bakery.');
         break;
       }
       fedAny = true;
-      if (dog.level > prevLevel) {
+      if (liveDog.level > prevLevel) {
         leveledUp = true;
-        _showToast('LEVEL UP! ${dog.name} is now Level ${dog.level}!');
+        _showToast('LEVEL UP! ${liveDog.name} is now Level ${liveDog.level}!');
       }
     }
     setState(() {
@@ -1195,15 +1215,19 @@ class _HabitatCarePageState extends State<HabitatCarePage>
                               )
                             else
                             SizedBox(
-                              key: widget.walkthroughKeys?[
-                                  WalkthroughTargets.careFeedButton],
                               width: 280,
                               child: Row(
                                 children: [
-                                  // Primary Feed Button
                                   Expanded(
-                                    flex: 3,
-                                    child: HoverScale(
+                                    flex: 5,
+                                    child: Row(
+                                      key: widget.walkthroughKeys?[
+                                          WalkthroughTargets.careFeedButton],
+                                      children: [
+                                        // Primary Feed Button
+                                        Expanded(
+                                          flex: 3,
+                                          child: HoverScale(
                                       scale: hasEnoughKibble ? 1.05 : 1.0,
                                       onTap: hasEnoughKibble
                                           ? () => _feedSteps(1)
@@ -1341,6 +1365,9 @@ class _HabitatCarePageState extends State<HabitatCarePage>
                                           ),
                                         ),
                                       ),
+                                    ),
+                                  ),
+                                      ],
                                     ),
                                   ),
                                   const SizedBox(width: 6),

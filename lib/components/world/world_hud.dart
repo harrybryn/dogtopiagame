@@ -1021,16 +1021,17 @@ class WorldHUD extends StatelessWidget {
                         ),
                       ),
                     ] else if (isHabitat) ...[
-                      if (hab.dogs.isNotEmpty) ...[
+                      if (hab.dogs.any((d) => !d.isInBreeding)) ...[
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            for (int i = 0; i < hab.dogs.length && i < 4; i++) ...[
-                              Padding(
-                                padding: const EdgeInsets.only(right: 10),
-                                child: _buildResidentDogAvatar(hab.dogs[i], hab, i),
-                              ),
-                            ],
+                            for (int i = 0; i < hab.dogs.length && i < 4; i++)
+                              if (!hab.dogs[i].isInBreeding)
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 10),
+                                  child:
+                                      _buildResidentDogAvatar(hab.dogs[i], hab, i),
+                                ),
                           ],
                         ),
                       ] else ...[
@@ -1302,18 +1303,104 @@ class WorldHUD extends StatelessWidget {
                                   ),
                                 ),
                                 const SizedBox(height: 4),
-                                const Text(
-                                  'BREED',
+                                Text(
+                                  game.isBreedingReadyToClaim
+                                      ? 'CLAIM!'
+                                      : 'BREED',
                                   style: TextStyle(
                                     fontFamily: 'Lilita One',
                                     fontSize: 10,
-                                    color: Color(0xFFF9A8D4),
+                                    color: game.isBreedingReadyToClaim
+                                        ? const Color(0xFFFEF08A)
+                                        : const Color(0xFFF9A8D4),
                                     letterSpacing: 0.5,
                                   ),
                                 ),
                               ],
                             ),
                           ),
+                          const SizedBox(width: 12),
+                        ],
+
+                        // UPGRADE Button (Habitats & Food Factory)
+                        if (catItem != null &&
+                            !hab.underConstruction &&
+                            hab.level < catItem.maxUpgradeLevel) ...[
+                          () {
+                            final upgCost =
+                                catItem.upgradeCostForLevel(hab.level);
+                            final reqLvl =
+                                catItem.upgradeRequiredPlayerLevel(hab.level);
+                            final canUpg = game.level >= reqLvl &&
+                                game.coins >= upgCost;
+                            return HoverScale(
+                              scale: canUpg ? 1.08 : 1.0,
+                              onTap: canUpg
+                                  ? () => game.upgradeHabitat(hab.id)
+                                  : null,
+                              tooltip: game.level < reqLvl
+                                  ? 'Upgrade requires Player Level $reqLvl'
+                                  : 'Upgrade to Lv.${hab.level + 1} (${GameController.formatCoins(upgCost)} Coins)',
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    width: 48,
+                                    height: 48,
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        begin: Alignment.topCenter,
+                                        end: Alignment.bottomCenter,
+                                        colors: canUpg
+                                            ? const [
+                                                Color(0xFF34D399),
+                                                Color(0xFF059669),
+                                              ]
+                                            : const [
+                                                Color(0xFF64748B),
+                                                Color(0xFF475569),
+                                              ],
+                                      ),
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(
+                                        color: canUpg
+                                            ? const Color(0xFFA7F3D0)
+                                            : const Color(0xFF94A3B8),
+                                        width: 1.5,
+                                      ),
+                                      boxShadow: const [
+                                        BoxShadow(
+                                          color: Color(0x66000000),
+                                          blurRadius: 6,
+                                          offset: Offset(0, 3),
+                                        ),
+                                      ],
+                                    ),
+                                    alignment: Alignment.center,
+                                    child: const Icon(
+                                      Icons.arrow_circle_up_rounded,
+                                      color: Colors.white,
+                                      size: 26,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    game.level < reqLvl
+                                        ? 'LVL $reqLvl'
+                                        : _formatNumber(upgCost),
+                                    style: TextStyle(
+                                      fontFamily: 'Lilita One',
+                                      fontSize: 10,
+                                      color: canUpg
+                                          ? const Color(0xFF6EE7B7)
+                                          : const Color(0xFFCBD5E1),
+                                      letterSpacing: 0.4,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }(),
                           const SizedBox(width: 12),
                         ],
 
@@ -1372,7 +1459,9 @@ class WorldHUD extends StatelessWidget {
                                 Text(
                                   game.canHydratePark
                                       ? 'HYDRATE'
-                                      : '${game.hydrationCooldownRemainingSeconds}s',
+                                      : DogStageInfo.formatDuration(
+                                          game.hydrationCooldownRemainingSeconds,
+                                        ),
                                   style: TextStyle(
                                     fontFamily: 'Lilita One',
                                     fontSize: 10,

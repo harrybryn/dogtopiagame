@@ -461,8 +461,8 @@ class SocialService {
 
   /// Searches players by username (empty query lists players for browsing).
   Future<List<PlayerSearchPreview>> searchPlayers(String query) async {
+    if (!CloudSaveService.instance.isAvailable) return const [];
     final myId = _myId;
-    if (!isAvailable || myId == null) return const [];
 
     try {
       final res = await _client.rpc(
@@ -488,8 +488,10 @@ class SocialService {
       final q = query.trim();
       var req = _client
           .from(_savesTable)
-          .select('user_id, username, level, save_data, updated_at')
-          .neq('user_id', myId);
+          .select('user_id, username, level, save_data, updated_at');
+      if (myId != null) {
+        req = req.neq('user_id', myId);
+      }
       if (q.isNotEmpty) {
         req = req.ilike('username', '%$q%');
       }

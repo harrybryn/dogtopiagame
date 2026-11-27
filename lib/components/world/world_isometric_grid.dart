@@ -5,6 +5,7 @@ import '../../models/habitat_model.dart';
 import '../../models/habitat_catalog.dart';
 import '../../models/dog_evolution.dart';
 import '../../models/obstacle_model.dart';
+import '../../models/progression_models.dart';
 import '../../services/audio_service.dart';
 import '../common/hover_scale.dart';
 import '../common/loading_progress_bar.dart';
@@ -90,6 +91,9 @@ class WorldIsometricGrid extends StatefulWidget {
   final Set<String>? highlightedHabitatIds;
   final bool isSelectingHabitat;
   final Function(HabitatModel)? onSelectTargetHabitat;
+  final Function(HabitatModel)? onTapIncompatibleHabitat;
+  final BreedingSession? activeBreeding;
+  final VoidCallback? onOpenBreeding;
 
   // Obstacle & Locked Lot Extension properties (2 Lots: Lot 1 = Upper [c >= 13, r < 12], Lot 2 = Lower [c >= 13, r >= 12])
   final List<ObstacleModel> obstacles;
@@ -124,6 +128,9 @@ class WorldIsometricGrid extends StatefulWidget {
     this.highlightedHabitatIds,
     this.isSelectingHabitat = false,
     this.onSelectTargetHabitat,
+    this.onTapIncompatibleHabitat,
+    this.activeBreeding,
+    this.onOpenBreeding,
     this.obstacles = const [],
     this.selectedObstacleId,
     this.isLotExpansionUnlocked = false,
@@ -167,7 +174,8 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
       if (!mounted) return;
       final hasActiveTimers =
           widget.habitats.any((h) => h.underConstruction) ||
-          widget.obstacles.any((o) => o.isClearing);
+          widget.obstacles.any((o) => o.isClearing) ||
+          (widget.activeBreeding != null && !widget.activeBreeding!.isReady);
       if (!hasActiveTimers) return;
 
       final now = DateTime.now().millisecondsSinceEpoch;
@@ -229,6 +237,32 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
     });
   }
 
+  ({int c, int r})? _findBestOpenSpot(int w, int h) {
+    const int anchorC = 11;
+    const int anchorR = 13;
+    int? bestC;
+    int? bestR;
+    int bestDistSq = 1 << 30;
+
+    for (int c = 0; c <= gridCols - w; c++) {
+      for (int r = 0; r <= gridRows - h; r++) {
+        if (!_isFootprintValid(c, r, w, h)) continue;
+        final dc = (c + w ~/ 2) - anchorC;
+        final dr = (r + h ~/ 2) - anchorR;
+        final distSq = dc * dc + dr * dr;
+        if (distSq < bestDistSq) {
+          bestDistSq = distSq;
+          bestC = c;
+          bestR = r;
+        }
+      }
+    }
+    if (bestC != null && bestR != null) {
+      return (c: bestC, r: bestR);
+    }
+    return null;
+  }
+
   void _syncGhostPos() {
     if (widget.movingHabitatId != null) {
       final movingHab = widget.habitats.firstWhere(
@@ -239,8 +273,15 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
       _ghostCol = movingHab.col;
       _ghostRow = movingHab.row;
     } else if (widget.placingItem != null) {
-      _ghostCol = 11;
-      _ghostRow = 9;
+      final item = widget.placingItem!;
+      final best = _findBestOpenSpot(item.sizeW, item.sizeH);
+      if (best != null) {
+        _ghostCol = best.c;
+        _ghostRow = best.r;
+      } else {
+        _ghostCol = 11;
+        _ghostRow = 13;
+      }
     }
   }
 
@@ -515,6 +556,8 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
           if (widget.isSelectingHabitat) {
             if (isCompatible) {
               widget.onSelectTargetHabitat?.call(hab);
+            } else if (hab.type == 'habitat') {
+              widget.onTapIncompatibleHabitat?.call(hab);
             }
             return;
           }
@@ -611,6 +654,38 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
               ),
             ),
 
+            if (widget.isSelectingHabitat &&
+                !isCompatible &&
+                hab.type == 'habitat')
+              Positioned(
+                bottom: imgH * 0.14,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: const Color(0xE67F1D1D),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: const Color(0xFFFCA5A5),
+                      width: 1.2,
+                    ),
+                  ),
+                  child: Text(
+                    hab.underConstruction
+                        ? 'BUILDING...'
+                        : (hab.dogs.length >= 4
+                            ? 'FULL (4/4)'
+                            : 'WRONG ELEMENT'),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontFamily: 'Lilita One',
+                      fontSize: 9.5,
+                      letterSpacing: 0.4,
+                    ),
+                  ),
+                ),
+              ),
+
             // ── Bouncing Arrow Pointing at Available Compatible Habitat ──
             if (isCompatible)
               Positioned(
@@ -619,17 +694,25 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
               ),
 
             // Resident Dog(s) wander with separation & dynamic Y-depth sorting
-            if (!isUnderConstruction && hab.dogs.isNotEmpty)
+            if (!isUnderConstruction &&
+                hab.dogs.any((d) => !d.isInBreeding))
               Positioned.fill(
                 child: HabitatPatrolGroup(
                   key: ValueKey('${hab.id}_patrol'),
                   habitatId: hab.id,
-                  dogs: hab.dogs,
+                  dogs: hab.dogs.where((d) => !d.isInBreeding).toList(),
                   center: Offset(imgW / 2, corners.center.dy - imgY),
                   isThirsty: !widget.isIslandHydrated,
                   onTap: () => widget.onSelectHabitat(hab),
                 ),
               ),
+
+            // Animated falling water drops when island is hydrated
+            if (widget.isIslandHydrated &&
+                !isUnderConstruction &&
+                hab.type == 'habitat' &&
+                !widget.isOverview)
+              _buildHydrationDropsOverlay(imgW, imgH),
 
           ],
         ),
@@ -691,12 +774,76 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
     );
   }
 
+  Widget _buildHydrationDropsOverlay(double imgW, double imgH) {
+    return IgnorePointer(
+      child: SizedBox(
+        width: imgW,
+        height: imgH,
+        child: AnimatedBuilder(
+          animation: _ambientController,
+          builder: (_, __) {
+            final t = _ambientController.value;
+            Widget drop(double xFrac, double phase, double size) {
+              final progress = (t + phase) % 1.0;
+              final dy = imgH * (-0.04 + progress * 0.74);
+              final opacity = progress < 0.12
+                  ? (progress / 0.12)
+                  : (progress > 0.78 ? ((1.0 - progress) / 0.22) : 1.0);
+              return Positioned(
+                left: imgW * xFrac - size / 2,
+                top: dy,
+                child: Opacity(
+                  opacity: opacity.clamp(0.0, 1.0),
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Icon(
+                        Icons.water_drop_rounded,
+                        size: size + 4,
+                        color: const Color(0xAA0369A1),
+                      ),
+                      Icon(
+                        Icons.water_drop_rounded,
+                        size: size,
+                        color: const Color(0xFF38BDF8),
+                        shadows: const [
+                          Shadow(
+                            color: Color(0xFFE0F2FE),
+                            blurRadius: 8,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
+
+            return Stack(
+              clipBehavior: Clip.none,
+              children: [
+                drop(0.18, 0.00, 19),
+                drop(0.32, 0.45, 22),
+                drop(0.46, 0.18, 24),
+                drop(0.58, 0.70, 20),
+                drop(0.71, 0.33, 22),
+                drop(0.83, 0.82, 18),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
   List<Widget> _buildCollectionBubbles(HabitatModel hab) {
+    final isBreedingDen = hab.habitatId == 'breeding-den';
+    final breeding = isBreedingDen ? widget.activeBreeding : null;
     final showCoins =
         hab.dogs.isNotEmpty && hab.readyToCollect && hab.coinsAccumulated > 0;
     final showFood =
         hab.readyToCollectDogfood && hab.dogfoodAccumulated > 0;
-    if (!showCoins && !showFood) return const [];
+    if (!showCoins && !showFood && breeding == null) return const [];
 
     final corners = getHabitatCorners(hab.col, hab.row, hab.sizeW, hab.sizeH);
     final footprintW = corners.pRight.dx - corners.pLeft.dx;
@@ -707,6 +854,12 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
     const double bubbleSize = 56.0;
 
     return [
+      if (breeding != null)
+        _buildBreedingIndicatorBubble(
+          left: imgX + (imgW - 88) / 2,
+          baseTop: imgY - 40,
+          session: breeding,
+        ),
       if (showCoins)
         _buildSingleCollectionBubble(
           left: imgX + (imgW - bubbleSize) / 2,
@@ -730,6 +883,117 @@ class _WorldIsometricGridState extends State<WorldIsometricGrid>
           onTap: () => widget.onCollectDogfood(hab.id),
         ),
     ];
+  }
+
+  Widget _buildBreedingIndicatorBubble({
+    required double left,
+    required double baseTop,
+    required BreedingSession session,
+  }) {
+    final p1Prefix = DogStageInfo.getBreedPrefix(session.parent1BreedId);
+    final p2Prefix = DogStageInfo.getBreedPrefix(session.parent2BreedId);
+    final p1Img = 'assets/itemsInShop/dogs/${p1Prefix}AdultSit.png';
+    final p2Img = 'assets/itemsInShop/dogs/${p2Prefix}AdultSit.png';
+    final isReady = session.isReady;
+
+    return AnimatedBuilder(
+      animation: _bounceController,
+      builder: (_, __) {
+        final floatY = isReady ? _bounceController.value * 8 : 0.0;
+        final pulseScale =
+            isReady ? (1.0 + 0.06 * sin(_bounceController.value * pi)) : 1.0;
+        return Positioned(
+          top: baseTop - floatY,
+          left: left,
+          child: Transform.scale(
+            scale: pulseScale,
+            child: HoverScale(
+              scale: 1.12,
+              behavior: HitTestBehavior.opaque,
+              onTap: widget.onOpenBreeding,
+              tooltip: isReady
+                  ? 'Breeding Complete! Tap to claim puppy!'
+                  : 'Breeding: ${DogStageInfo.formatDuration(session.remainingSeconds)} left',
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: isReady
+                        ? const [Color(0xFFF43F5E), Color(0xFFBE123C)]
+                        : const [Color(0xFF451A03), Color(0xFF290E02)],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                  ),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                    color: isReady
+                        ? const Color(0xFFFEF08A)
+                        : const Color(0xFFFDA4AF),
+                    width: 2,
+                  ),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x88000000),
+                      blurRadius: 8,
+                      offset: Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ClipOval(
+                          child: Container(
+                            width: 24,
+                            height: 24,
+                            color: const Color(0xFFFFF1F2),
+                            child: Image.asset(p1Img, fit: BoxFit.contain),
+                          ),
+                        ),
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 3),
+                          child: Icon(
+                            Icons.favorite_rounded,
+                            color: Color(0xFFFDE047),
+                            size: 13,
+                          ),
+                        ),
+                        ClipOval(
+                          child: Container(
+                            width: 24,
+                            height: 24,
+                            color: const Color(0xFFFFF1F2),
+                            child: Image.asset(p2Img, fit: BoxFit.contain),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      isReady
+                          ? 'CLAIM PUP!'
+                          : DogStageInfo.formatDuration(
+                              session.remainingSeconds),
+                      style: const TextStyle(
+                        color: Color(0xFFFEF08A),
+                        fontFamily: 'Lilita One',
+                        fontSize: 9.5,
+                        letterSpacing: 0.4,
+                        height: 1.0,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Widget _buildSingleCollectionBubble({

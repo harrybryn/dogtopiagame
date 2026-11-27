@@ -9,6 +9,7 @@ import 'services/local_save_service.dart';
 import 'services/social_service.dart';
 import 'components/common/existing_account_dialog.dart';
 import 'components/common/loading_screen.dart';
+import 'components/common/celebration_modal.dart';
 import 'components/common/username_setup_overlay.dart';
 import 'components/common/walkthrough_overlay.dart';
 import 'models/walkthrough_step.dart';
@@ -241,6 +242,9 @@ class _DogtopiaRootState extends State<DogtopiaRoot>
       onPointerDown: (_) {
         SoundManager.instance.handleUserInteraction();
       },
+      onPointerUp: (_) {
+        SoundManager.instance.handleUserInteraction();
+      },
       child: ListenableBuilder(
         listenable: _game,
         builder: (context, _) {
@@ -312,6 +316,19 @@ class _DogtopiaRootState extends State<DogtopiaRoot>
               activePage = BreedingPage(
                 game: _game,
                 onBackToWorld: () => _navigateTo('world'),
+                onStartPlaceBredPuppy: (breedId, breedName, element, sitImg) {
+                  _navigateTo(
+                    'world',
+                    args: {
+                      'placeBredPuppy': {
+                        'breedId': breedId,
+                        'breedName': breedName,
+                        'element': element,
+                        'sitImg': sitImg,
+                      },
+                    },
+                  );
+                },
               );
               break;
 
@@ -419,6 +436,11 @@ class _DogtopiaRootState extends State<DogtopiaRoot>
                   targetKeys: _walkthroughKeys,
                   worldTargetRectNotifier: _walkthroughWorldTargetRect,
                   onReturnToWorld: () => _navigateTo('world'),
+                ),
+              if (_game.hasUsername && _game.currentCelebration != null)
+                CelebrationModal(
+                  event: _game.currentCelebration!,
+                  onDismiss: _game.dismissCelebration,
                 ),
               if (_giftBannerMessage != null)
                 Positioned(

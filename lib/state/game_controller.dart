@@ -10,7 +10,9 @@ import '../models/obstacle_model.dart';
 import '../models/food_recipe_model.dart';
 import '../models/level_milestone.dart';
 import '../models/walkthrough_step.dart';
+import '../models/celebration_event.dart';
 import '../models/island_model.dart';
+import '../models/progression_models.dart';
 import '../services/audio_service.dart';
 
 class GameController extends ChangeNotifier {
@@ -24,7 +26,12 @@ class GameController extends ChangeNotifier {
   int _kibble = 1000;
   int _level = 1;
   int _xp = 0;
-  int _maxXp = 500;
+  int _maxXp = 1200;
+
+  static int maxXpForLevel(int level) {
+    final raw = 1200 * pow(1.32, max(0, level - 1));
+    return ((raw / 50).round() * 50).clamp(1200, 10000000);
+  }
 
   // Audio settings
   bool _sfxEnabled = true;
@@ -67,6 +74,14 @@ class GameController extends ChangeNotifier {
   int _walkthroughStepIndex = 0;
   bool _walkthroughCompleted = false;
   bool _walkthroughRewardClaimed = false;
+  bool _isIslandOverviewOpen = false;
+  bool _isShopDialogOpen = false;
+  bool _isSocialDialogOpen = false;
+  bool _walkthroughCareCompleted = false;
+  bool _walkthroughShopVisited = false;
+  bool _walkthroughIslandsVisited = false;
+  bool _walkthroughSocialVisited = false;
+  final List<CelebrationEvent> _pendingCelebrations = [];
 
   // Claimed every-5-levels milestone rewards (e.g. {5, 10, 15})
   Set<int> _claimedLevelMilestones = {};
@@ -75,6 +90,15 @@ class GameController extends ChangeNotifier {
   int _lastHydrateAt = 0;
   int _hydrationRushEndsAt = 0;
   int _hydratedUntil = 0;
+
+  // Breeding Den persistent session
+  BreedingSession? _activeBreeding;
+
+  // Shop offer cooldowns & purchase limits
+  Map<String, ShopOfferState> _shopOfferStates = {};
+
+  // Offline income tracking
+  int _lastIncomeTickAt = 0;
 
   GameController({bool startWalkthrough = true}) {
     _walkthroughActive = startWalkthrough;
@@ -145,6 +169,63 @@ class GameController extends ChangeNotifier {
   int get walkthroughTotalSteps => WalkthroughStep.steps.length;
   bool get walkthroughCompleted => _walkthroughCompleted;
   bool get walkthroughRewardClaimed => _walkthroughRewardClaimed;
+  bool get isIslandOverviewOpen => _isIslandOverviewOpen;
+  bool get isShopDialogOpen => _isShopDialogOpen;
+  bool get isSocialDialogOpen => _isSocialDialogOpen;
+  bool get walkthroughCareCompleted => _walkthroughCareCompleted;
+  bool get walkthroughShopVisited => _walkthroughShopVisited;
+  bool get walkthroughIslandsVisited => _walkthroughIslandsVisited;
+  bool get walkthroughSocialVisited => _walkthroughSocialVisited;
+  CelebrationEvent? get currentCelebration =>
+      _pendingCelebrations.isEmpty ? null : _pendingCelebrations.first;
+
+  void dismissCelebration() {
+    if (_pendingCelebrations.isEmpty) return;
+    _pendingCelebrations.removeAt(0);
+    notifyListeners();
+  }
+
+  void setShopDialogOpen(bool open) {
+    if (_isShopDialogOpen == open) return;
+    _isShopDialogOpen = open;
+    notifyListeners();
+  }
+
+  void setSocialDialogOpen(bool open) {
+    if (_isSocialDialogOpen == open) return;
+    _isSocialDialogOpen = open;
+    notifyListeners();
+  }
+
+  void markWalkthroughSocialVisited() {
+    if (currentWalkthroughStep?.id == WalkthroughStepId.socialAndProgress &&
+        !_walkthroughSocialVisited) {
+      _walkthroughSocialVisited = true;
+      SoundManager.instance.playWalkthroughStepComplete();
+      notifyListeners();
+    }
+  }
+
+  void markWalkthroughShopVisited() {
+    if (currentWalkthroughStep?.id == WalkthroughStepId.shopAndGoals &&
+        !_walkthroughShopVisited) {
+      _walkthroughShopVisited = true;
+      SoundManager.instance.playWalkthroughStepComplete();
+      notifyListeners();
+    }
+  }
+
+  void setIslandOverviewOpen(bool open) {
+    if (_isIslandOverviewOpen == open) return;
+    _isIslandOverviewOpen = open;
+    if (!open &&
+        currentWalkthroughStep?.id == WalkthroughStepId.exploreIslands &&
+        !_walkthroughIslandsVisited) {
+      _walkthroughIslandsVisited = true;
+      SoundManager.instance.playWalkthroughStepComplete();
+    }
+    notifyListeners();
+  }
   Set<int> get claimedLevelMilestones => Set.unmodifiable(_claimedLevelMilestones);
 
   /// Every-5-levels milestone list (always extends at least one milestone ahead of current level).
@@ -225,6 +306,11 @@ class GameController extends ChangeNotifier {
       'lastHydrateAt': _lastHydrateAt,
       'hydrationRushEndsAt': _hydrationRushEndsAt,
       'hydratedUntil': _hydratedUntil,
+      'activeBreeding': _activeBreeding?.toJson(),
+      'shopOfferStates': _shopOfferStates.map(
+        (k, v) => MapEntry(k, v.toJson()),
+      ),
+      'lastIncomeTickAt': _lastIncomeTickAt,
       'placedHabitats': _placedHabitats.map((h) => h.toJson()).toList(),
       'obstacles': obstaclesForIsland(IslandCatalog.starterIslandId)
           .map((o) => o.toJson())
@@ -238,18 +324,44 @@ class GameController extends ChangeNotifier {
 
   void loadFromJson(Map<String, dynamic> json) {
     _playerUsername = (json['playerUsername'] as String? ?? '').trim();
-    _savedAt = json['savedAt'] as int? ?? 0;
-    _coins = json['coins'] as int? ?? 5000;
-    _crystals = json['crystals'] as int? ?? 25;
-    _kibble = json['kibble'] as int? ?? 1000;
-    _level = json['level'] as int? ?? 1;
-    _xp = json['xp'] as int? ?? 0;
-    _maxXp = json['maxXp'] as int? ?? 500;
+    _savedAt = (json['savedAt'] as num?)?.toInt() ?? 0;
+    _coins = (json['coins'] as num?)?.toInt() ?? 5000;
+    _crystals = (json['crystals'] as num?)?.toInt() ?? 25;
+    _kibble = (json['kibble'] as num?)?.toInt() ?? 1000;
+    _level = (json['level'] as num?)?.toInt() ?? 1;
+    _xp = (json['xp'] as num?)?.toInt() ?? 0;
+    _maxXp = max(
+      (json['maxXp'] as num?)?.toInt() ?? maxXpForLevel(_level),
+      maxXpForLevel(_level),
+    );
 
     _sfxEnabled = json['sfxEnabled'] as bool? ?? true;
     _lastHydrateAt = (json['lastHydrateAt'] as num?)?.toInt() ?? 0;
     _hydrationRushEndsAt = (json['hydrationRushEndsAt'] as num?)?.toInt() ?? 0;
     _hydratedUntil = (json['hydratedUntil'] as num?)?.toInt() ?? 0;
+    _lastIncomeTickAt =
+        (json['lastIncomeTickAt'] as num?)?.toInt() ?? _savedAt;
+
+    final rawBreeding = json['activeBreeding'];
+    if (rawBreeding is Map) {
+      _activeBreeding = BreedingSession.fromJson(
+        Map<String, dynamic>.from(rawBreeding),
+      );
+    } else {
+      _activeBreeding = null;
+    }
+
+    _shopOfferStates = {};
+    final rawOffers = json['shopOfferStates'];
+    if (rawOffers is Map) {
+      for (final entry in rawOffers.entries) {
+        if (entry.value is Map) {
+          _shopOfferStates[entry.key.toString()] = ShopOfferState.fromJson(
+            Map<String, dynamic>.from(entry.value as Map),
+          );
+        }
+      }
+    }
     _bgmEnabled = json['bgmEnabled'] as bool? ?? true;
     _sfxVolume = (json['sfxVolume'] as num?)?.toDouble() ?? 0.8;
     _bgmVolume = (json['bgmVolume'] as num?)?.toDouble() ?? 0.5;
@@ -372,6 +484,13 @@ class GameController extends ChangeNotifier {
     }
 
     // Resolve any baking/income progress completed while the app was closed
+    for (final h in _placedHabitats) {
+      for (final d in h.dogs) {
+        d.isInBreeding = _activeBreeding != null &&
+            (d.id == _activeBreeding!.parent1Id ||
+                d.id == _activeBreeding!.parent2Id);
+      }
+    }
     tickIncome();
     notifyListeners();
   }
@@ -451,6 +570,10 @@ class GameController extends ChangeNotifier {
     }
 
     _walkthroughStepIndex += 1;
+    _walkthroughCareCompleted = false;
+    _walkthroughShopVisited = false;
+    _walkthroughIslandsVisited = false;
+    _walkthroughSocialVisited = false;
     SoundManager.instance.playWalkthroughStepComplete();
     notifyListeners();
   }
@@ -459,6 +582,10 @@ class GameController extends ChangeNotifier {
     if (!_walkthroughActive) return;
     _walkthroughActive = false;
     _walkthroughCompleted = true;
+    _walkthroughCareCompleted = false;
+    _walkthroughShopVisited = false;
+    _walkthroughIslandsVisited = false;
+    _walkthroughSocialVisited = false;
     SoundManager.instance.playClick();
     notifyListeners();
   }
@@ -467,6 +594,10 @@ class GameController extends ChangeNotifier {
     _selectedHabitatId = null;
     _selectedObstacleId = null;
     _walkthroughStepIndex = 0;
+    _walkthroughCareCompleted = false;
+    _walkthroughShopVisited = false;
+    _walkthroughIslandsVisited = false;
+    _walkthroughSocialVisited = false;
     _walkthroughActive = true;
     SoundManager.instance.playWalkthroughPop();
     notifyListeners();
@@ -741,6 +872,20 @@ class GameController extends ChangeNotifier {
     final hydrated = isIslandHydrated;
     final rushActive = isHydrationRushActive;
 
+    final elapsedMs = _lastIncomeTickAt > 0
+        ? max(10000, now - _lastIncomeTickAt)
+        : 10000;
+    final ticks = (elapsedMs ~/ 10000).clamp(1, 8640); // Up to 24h offline
+    _lastIncomeTickAt = now;
+
+    if (_activeBreeding != null &&
+        _activeBreeding!.isReady &&
+        !_activeBreeding!.readyNotified) {
+      _activeBreeding!.readyNotified = true;
+      SoundManager.instance.playLevelUp();
+      changed = true;
+    }
+
     for (final h in _placedHabitats) {
       if (h.underConstruction &&
           h.constructionEndsAt != null &&
@@ -767,22 +912,26 @@ class GameController extends ChangeNotifier {
             h.readyToCollect = false;
             changed = true;
           }
-        } else if (h.coinsAccumulated < h.maxCoins) {
+        } else if (!h.underConstruction && h.coinsAccumulated < h.maxCoins) {
           final dogRate = h.dogs.fold<int>(
               0, (sum, d) => sum + (30 + (d.level * 15)));
-          final baseAdd = max(25, (dogRate / 4).round());
+          final levelMultiplier = 1.0 + (h.level - 1) * 0.15;
+          final baseAdd = max(25, ((dogRate / 4) * levelMultiplier).round());
           var adjustedAdd = hydrated
               ? (baseAdd * 1.15).round()
               : max(10, (baseAdd * 0.5).round());
-          if (rushActive) {
+          if (rushActive && ticks == 1) {
             adjustedAdd *= 2;
           }
-          final add = min(h.maxCoins - h.coinsAccumulated, adjustedAdd);
-          h.coinsAccumulated += add;
-          if (h.coinsAccumulated >= (h.maxCoins * 0.35).floor()) {
-            h.readyToCollect = true;
+          final totalAdd = adjustedAdd * ticks;
+          final add = min(h.maxCoins - h.coinsAccumulated, totalAdd);
+          if (add > 0) {
+            h.coinsAccumulated += add;
+            if (h.coinsAccumulated >= (h.maxCoins * 0.35).floor()) {
+              h.readyToCollect = true;
+            }
+            changed = true;
           }
-          changed = true;
         }
       }
     }
@@ -862,22 +1011,26 @@ class GameController extends ChangeNotifier {
     return diff > 0 ? (diff / 1000).ceil() : 0;
   }
 
+  static const int hydrationCooldownMs = 2 * 60 * 60 * 1000; // 2 hours
+  static const int hydrationEffectDurationMs = 60 * 1000; // 1 minute
+
   int get hydrationCooldownRemainingSeconds {
-    final endsAt = _lastHydrateAt + 120000;
+    final endsAt = _lastHydrateAt + hydrationCooldownMs;
     final diff = endsAt - DateTime.now().millisecondsSinceEpoch;
     return diff > 0 ? (diff / 1000).ceil() : 0;
   }
 
   bool get canHydratePark => hydrationCooldownRemainingSeconds == 0;
 
-  /// Activates a 60s 2x Hydration Rush across the island and awards instant
-  /// bonus coins + XP. Returns coins awarded, or 0 if still on cooldown.
+  /// Activates a 1-minute 2x Hydration Rush across the island with a 2-hour
+  /// cooldown, awarding instant bonus coins + XP. Returns coins awarded, or 0
+  /// if still on cooldown.
   int hydratePark() {
     if (!canHydratePark) return 0;
     final now = DateTime.now().millisecondsSinceEpoch;
     _lastHydrateAt = now;
-    _hydrationRushEndsAt = now + 60000;
-    _hydratedUntil = now + 600000; // 10 minutes hydrated
+    _hydrationRushEndsAt = now + hydrationEffectDurationMs;
+    _hydratedUntil = now + hydrationEffectDurationMs;
 
     final totalDogs = currentIslandHabitats.fold<int>(
       0,
@@ -945,8 +1098,308 @@ class GameController extends ChangeNotifier {
     return _coins >= costCoins && _crystals >= costCrystals;
   }
 
+  // ── Building Ownership Limits & Unique Restrictions ──
+  int getBuildingOwnedCount(String catalogId) {
+    return _placedHabitats.where((h) => h.habitatId == catalogId).length;
+  }
+
+  int getBuildingLimit(String catalogId) {
+    final item = HabitatCatalog.findById(catalogId);
+    if (item != null && item.isUnique) return 1;
+    if (catalogId == 'breeding-den') return 1;
+    if (catalogId == 'water-station') {
+      return _level >= 8 ? 2 : 1;
+    }
+    if (catalogId == 'legendary-realm') {
+      return _level >= 25 ? 2 : 1;
+    }
+    if (item != null && item.type == 'decor') {
+      if (_level >= 10) return 6;
+      if (_level >= 5) return 4;
+      return 2;
+    }
+    // Habitats and Dogfood Factory scale with player level
+    if (_level >= 15) return 4;
+    if (_level >= 10) return 3;
+    if (_level >= 5) return 2;
+    return 1;
+  }
+
+  int? nextBuildingSlotUnlockLevel(String catalogId) {
+    final item = HabitatCatalog.findById(catalogId);
+    if (item != null && item.isUnique) return null;
+    if (catalogId == 'breeding-den') return null;
+    if (catalogId == 'water-station') {
+      return _level < 8 ? 8 : null;
+    }
+    if (catalogId == 'legendary-realm') {
+      return _level < 25 ? 25 : null;
+    }
+    if (item != null && item.type == 'decor') {
+      if (_level < 5) return 5;
+      if (_level < 10) return 10;
+      return null;
+    }
+    if (_level < 5) return 5;
+    if (_level < 10) return 10;
+    if (_level < 15) return 15;
+    return null;
+  }
+
+  bool canPurchaseBuilding(HabitatCatalogItem item) {
+    if (_level < item.requiredLevel) return false;
+    return getBuildingOwnedCount(item.id) < getBuildingLimit(item.id);
+  }
+
+  // ── Building Upgrades ──
+  bool canUpgradeHabitat(HabitatModel hab) {
+    final item = HabitatCatalog.findById(hab.habitatId);
+    if (item == null) return false;
+    if (hab.underConstruction) return false;
+    if (hab.level >= item.maxUpgradeLevel) return false;
+    if (_level < item.upgradeRequiredPlayerLevel(hab.level)) return false;
+    return _coins >= item.upgradeCostForLevel(hab.level);
+  }
+
+  bool upgradeHabitat(String habitatId) {
+    final idx = _placedHabitats.indexWhere((h) => h.id == habitatId);
+    if (idx == -1) return false;
+    final hab = _placedHabitats[idx];
+    final item = HabitatCatalog.findById(hab.habitatId);
+    if (item == null || hab.underConstruction) return false;
+    if (hab.level >= item.maxUpgradeLevel) return false;
+
+    final reqLvl = item.upgradeRequiredPlayerLevel(hab.level);
+    final cost = item.upgradeCostForLevel(hab.level);
+    if (_level < reqLvl || _coins < cost) {
+      SoundManager.instance.playSadWhimper();
+      return false;
+    }
+
+    _coins -= cost;
+    hab.level += 1;
+    hab.maxCoins = item.maxCoinsForLevel(hab.level);
+    hab.maxDogfood = item.maxDogfoodForLevel(hab.level);
+
+    final durationSec = item.upgradeDurationForLevel(hab.level - 1);
+    final now = DateTime.now().millisecondsSinceEpoch;
+    hab.underConstruction = true;
+    hab.constructionDuration = durationSec;
+    hab.constructionEndsAt = now + durationSec * 1000;
+
+    _addXp(100 * hab.level);
+    SoundManager.instance.playBuild();
+    notifyListeners();
+    return true;
+  }
+
+  // ── Shop Offer Cooldowns & Purchase Limits ──
+  ShopOfferState getShopOfferState(String offerId) {
+    final state = _shopOfferStates.putIfAbsent(
+      offerId,
+      () => ShopOfferState(offerId: offerId),
+    );
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (state.cooldownEndsAt > 0 && now >= state.cooldownEndsAt) {
+      state.purchasesInWindow = 0;
+      state.cooldownEndsAt = 0;
+      state.windowStartedAt = 0;
+    }
+    return state;
+  }
+
+  int getShopOfferRemainingStock(String offerId) {
+    final rule = ShopOfferRule.findById(offerId);
+    if (rule == null) return 999;
+    final state = getShopOfferState(offerId);
+    if (state.isOnCooldown()) return 0;
+    return max(0, rule.maxPurchasesPerWindow - state.purchasesInWindow);
+  }
+
+  int getShopOfferCooldownSeconds(String offerId) {
+    return getShopOfferState(offerId).remainingCooldownSeconds();
+  }
+
+  bool isShopOfferAvailable(String offerId) {
+    final rule = ShopOfferRule.findById(offerId);
+    if (rule == null) return true;
+    if (_level < rule.requiredLevel) return false;
+    return getShopOfferRemainingStock(offerId) > 0;
+  }
+
+  bool purchaseShopOffer(
+    String offerId, {
+    int costCoins = 0,
+    int costCrystals = 0,
+    int addCoins = 0,
+    int addCrystals = 0,
+    int addKibble = 0,
+  }) {
+    final rule = ShopOfferRule.findById(offerId);
+    if (rule != null && !isShopOfferAvailable(offerId)) {
+      SoundManager.instance.playSadWhimper();
+      return false;
+    }
+    if (!canAfford(costCoins, costCrystals)) {
+      SoundManager.instance.playSadWhimper();
+      return false;
+    }
+
+    _coins -= costCoins;
+    _crystals -= costCrystals;
+    _coins += addCoins;
+    _crystals += addCrystals;
+    _kibble += addKibble;
+
+    if (rule != null) {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final state = getShopOfferState(offerId);
+      if (state.windowStartedAt == 0) {
+        state.windowStartedAt = now;
+      }
+      state.purchasesInWindow += 1;
+      if (state.purchasesInWindow >= rule.maxPurchasesPerWindow) {
+        state.cooldownEndsAt = now + rule.cooldownSeconds * 1000;
+      }
+    }
+
+    SoundManager.instance.playQuestReward();
+    notifyListeners();
+    return true;
+  }
+
+  // ── Persistent Breeding System ──
+  BreedingSession? get activeBreeding => _activeBreeding;
+  bool get isBreedingInProgress =>
+      _activeBreeding != null && !_activeBreeding!.isReady;
+  bool get isBreedingReadyToClaim =>
+      _activeBreeding != null && _activeBreeding!.isReady;
+  bool get hasBuiltBreedingDen => _placedHabitats.any(
+        (h) => h.habitatId == 'breeding-den' && !h.underConstruction,
+      );
+
+  DogModel? findDogByIdGlobal(String id) {
+    for (final h in _placedHabitats) {
+      for (final d in h.dogs) {
+        if (d.id == id) return d;
+      }
+    }
+    return null;
+  }
+
+  bool startBreeding(DogModel p1, DogModel p2, {int costCoins = 500}) {
+    if (_activeBreeding != null) return false;
+    if (!hasBuiltBreedingDen) return false;
+    if (p1.id == p2.id) return false;
+    if (!p1.isAdult || p1.level < 12 || !p2.isAdult || p2.level < 12) {
+      return false;
+    }
+    if (p1.isOnBreedingCooldown || p2.isOnBreedingCooldown) {
+      SoundManager.instance.playSadWhimper();
+      return false;
+    }
+    if (DogStageInfo.getBreedPrefix(p1.breedId) !=
+        DogStageInfo.getBreedPrefix(p2.breedId)) {
+      SoundManager.instance.playSadWhimper();
+      return false;
+    }
+    if (_coins < costCoins) {
+      SoundManager.instance.playSadWhimper();
+      return false;
+    }
+
+    _coins -= costCoins;
+    _addXp(100);
+
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final rarity = DogStageInfo.getRarityForBreed(p1.breedId);
+    final breedingEndsAt = now + rarity.breedingDurationSeconds * 1000;
+    final recoveryEndsAt =
+        breedingEndsAt + rarity.breedingRecoverySeconds * 1000;
+
+    p1.breedingCooldownEndsAt = recoveryEndsAt;
+    p2.breedingCooldownEndsAt = recoveryEndsAt;
+    p1.isInBreeding = true;
+    p2.isInBreeding = true;
+
+    _activeBreeding = BreedingSession(
+      parent1Id: p1.id,
+      parent2Id: p2.id,
+      parent1BreedId: p1.breedId,
+      parent2BreedId: p2.breedId,
+      resultBreedId: p1.breedId,
+      resultElement: p1.element,
+      startedAt: now,
+      endsAt: breedingEndsAt,
+    );
+
+    SoundManager.instance.playBake();
+    notifyListeners();
+    return true;
+  }
+
+  bool speedUpBreeding() {
+    final session = _activeBreeding;
+    if (session == null || session.isReady) return false;
+    final cost = speedUpCostForSeconds(session.remainingSeconds);
+    if (_crystals < cost) {
+      SoundManager.instance.playSadWhimper();
+      return false;
+    }
+
+    _crystals -= cost;
+    session.endsAt = DateTime.now().millisecondsSinceEpoch;
+    session.readyNotified = true;
+    SoundManager.instance.playLevelUp();
+    SoundManager.instance.playDogBark(isPuppy: true, force: true);
+    notifyListeners();
+    return true;
+  }
+
+  void _releaseBreedingParents() {
+    final session = _activeBreeding;
+    if (session == null) return;
+    for (final h in _placedHabitats) {
+      for (final d in h.dogs) {
+        if (d.id == session.parent1Id || d.id == session.parent2Id) {
+          d.isInBreeding = false;
+        }
+      }
+    }
+  }
+
+  String? claimBredPuppyToHabitat(String habitatId) {
+    final session = _activeBreeding;
+    if (session == null || !session.isReady) return null;
+    final habName = addBredPuppyToHabitat(
+      session.resultBreedId,
+      session.resultElement,
+      habitatId,
+    );
+    if (habName == null) return null;
+    _releaseBreedingParents();
+    _activeBreeding = null;
+    notifyListeners();
+    return habName;
+  }
+
+  bool sellBredPuppy(int sellCoins) {
+    final session = _activeBreeding;
+    if (session == null || !session.isReady) return false;
+    _coins += sellCoins;
+    _releaseBreedingParents();
+    _activeBreeding = null;
+    SoundManager.instance.playQuestReward();
+    notifyListeners();
+    return true;
+  }
+
   bool placeHabitat(HabitatCatalogItem item, int col, int row) {
     if (!IslandCatalog.isItemAllowedOnIsland(item, _currentIslandId)) {
+      SoundManager.instance.playSadWhimper();
+      return false;
+    }
+    if (!canPurchaseBuilding(item)) {
       SoundManager.instance.playSadWhimper();
       return false;
     }
@@ -1044,6 +1497,10 @@ class GameController extends ChangeNotifier {
   }
 
   bool adoptDog(DogCatalogItem dogItem, String targetHabitatId) {
+    if (_level < dogItem.requiredLevel || dogItem.isLocked) {
+      SoundManager.instance.playSadWhimper();
+      return false;
+    }
     if (!canAfford(dogItem.costCoins, dogItem.costCrystals)) {
       SoundManager.instance.playSadWhimper();
       return false;
@@ -1051,7 +1508,22 @@ class GameController extends ChangeNotifier {
 
     final hab = _placedHabitats.firstWhere((h) => h.id == targetHabitatId,
         orElse: () => HabitatModel(id: '', habitatId: '', name: '', col: 0, row: 0));
-    if (hab.id.isEmpty) return false;
+    if (hab.id.isEmpty ||
+        hab.type != 'habitat' ||
+        hab.underConstruction ||
+        hab.dogs.length >= 4) {
+      SoundManager.instance.playSadWhimper();
+      return false;
+    }
+    if (!HabitatCatalog.isHabitatCompatible(
+      habitatCatalogId: hab.habitatId,
+      breedId: dogItem.id,
+      element: dogItem.element,
+      preferredHabitatId: dogItem.habitatId,
+    )) {
+      SoundManager.instance.playSadWhimper();
+      return false;
+    }
 
     _coins -= dogItem.costCoins;
     _crystals -= dogItem.costCrystals;
@@ -1082,26 +1554,66 @@ class GameController extends ChangeNotifier {
         (h) => h.type == 'habitat' && !h.underConstruction && h.dogs.length < 4,
       );
 
-  /// Places a newly bred purebred puppy into a habitat with space (< 4 dogs)
-  /// on the current island. Returns the destination habitat name, or null if full.
+  /// Places a newly bred purebred puppy into a compatible habitat with space (< 4 dogs).
+  /// Returns the destination habitat name, or null if none available.
   String? addBredPuppy(String breedId, String element) {
-    final openHabitats = currentIslandHabitats
+    final openHabitats = _placedHabitats
         .where(
           (h) =>
               h.type == 'habitat' &&
               !h.underConstruction &&
-              h.dogs.length < 4,
+              h.dogs.length < 4 &&
+              HabitatCatalog.isHabitatCompatible(
+                habitatCatalogId: h.habitatId,
+                breedId: breedId,
+                element: element,
+              ),
         )
         .toList();
     if (openHabitats.isEmpty) return null;
 
-    final el = element.toLowerCase();
     final hab = openHabitats.firstWhere(
-      (h) =>
-          h.habitatId.toLowerCase().contains(el) ||
-          h.islandId.toLowerCase().contains(el),
+      (h) => h.islandId == _currentIslandId,
       orElse: () => openHabitats.first,
     );
+
+    final newDog = DogModel(
+      id: 'dog_${DateTime.now().millisecondsSinceEpoch}',
+      breedId: breedId,
+      name: _pickUniqueDogName(breedId),
+      level: 1,
+      feedProgress: 0,
+      stage: 'Puppy',
+      element: element,
+      habitatId: hab.id,
+      habitatName: hab.name,
+    );
+
+    hab.dogs.add(newDog);
+    _recordTaskProgress('Build');
+    notifyListeners();
+    return hab.name;
+  }
+
+  String? addBredPuppyToHabitat(
+    String breedId,
+    String element,
+    String habitatId,
+  ) {
+    final idx = _placedHabitats.indexWhere(
+      (h) =>
+          h.id == habitatId &&
+          h.type == 'habitat' &&
+          !h.underConstruction &&
+          h.dogs.length < 4 &&
+          HabitatCatalog.isHabitatCompatible(
+            habitatCatalogId: h.habitatId,
+            breedId: breedId,
+            element: element,
+          ),
+    );
+    if (idx == -1) return null;
+    final hab = _placedHabitats[idx];
 
     final newDog = DogModel(
       id: 'dog_${DateTime.now().millisecondsSinceEpoch}',
@@ -1192,13 +1704,22 @@ class GameController extends ChangeNotifier {
 
             d.feedProgress += 1;
             if (d.feedProgress >= 4) {
+              final previousStage = d.stage;
               d.feedProgress = 0;
               d.level += 1;
               _addXp(info.xpBonusOnLevelUp);
               if (d.level >= 12) {
                 d.stage = 'Adult';
-              } else if (d.level >= 4) {
+              } else if (d.level >= 6) {
                 d.stage = 'Young';
+              }
+              if (d.stage != previousStage) {
+                _pendingCelebrations.add(
+                  DogEvolutionCelebration.fromDog(
+                    d,
+                    previousStage: previousStage,
+                  ),
+                );
               }
               SoundManager.instance.playLevelUp();
               SoundManager.instance.playDogBark(isPuppy: d.stage == 'Puppy', force: true);
@@ -1207,6 +1728,7 @@ class GameController extends ChangeNotifier {
               final nextCost = DogStageInfo.getInfo(d).kibbleCostPerFeed;
               if (_kibble < nextCost) {
                 _walkthroughStepIndex += 1;
+                _walkthroughCareCompleted = false;
                 SoundManager.instance.playWalkthroughStepComplete();
               }
             }
@@ -1265,10 +1787,23 @@ class GameController extends ChangeNotifier {
       orElse: () => HabitatModel(id: '', habitatId: '', name: '', col: 0, row: 0),
     );
     if (fromHab.id.isEmpty || toHab.id.isEmpty) return false;
-    if (toHab.dogs.length >= 4) return false;
+    if (toHab.type != 'habitat' ||
+        toHab.underConstruction ||
+        toHab.dogs.length >= 4) {
+      return false;
+    }
 
     final dogIdx = fromHab.dogs.indexWhere((d) => d.id == dogId);
     if (dogIdx == -1) return false;
+    final candidate = fromHab.dogs[dogIdx];
+    if (!HabitatCatalog.isHabitatCompatible(
+      habitatCatalogId: toHab.habitatId,
+      breedId: candidate.breedId,
+      element: candidate.element,
+    )) {
+      SoundManager.instance.playSadWhimper();
+      return false;
+    }
 
     final dog = fromHab.dogs.removeAt(dogIdx);
     if (fromHab.dogs.isEmpty) {
@@ -1301,6 +1836,11 @@ class GameController extends ChangeNotifier {
 
   void recordCareTask() {
     _recordTaskProgress('Care');
+    if (currentWalkthroughStep?.id == WalkthroughStepId.batheDog &&
+        !_walkthroughCareCompleted) {
+      _walkthroughCareCompleted = true;
+      SoundManager.instance.playWalkthroughStepComplete();
+    }
     notifyListeners();
   }
 
@@ -1378,7 +1918,11 @@ class GameController extends ChangeNotifier {
     while (_xp >= _maxXp) {
       _xp -= _maxXp;
       _level += 1;
-      _maxXp = (_maxXp * 1.3).floor();
+      _maxXp = maxXpForLevel(_level);
+      final levelUpCelebration = PlayerLevelUpCelebration.forLevel(_level);
+      if (levelUpCelebration.unlockedItems.isNotEmpty) {
+        _pendingCelebrations.add(levelUpCelebration);
+      }
       // Milestone rewards are claimable every 5 levels (Levels 5, 10, 15, ...)
       SoundManager.instance.playLevelUp();
     }

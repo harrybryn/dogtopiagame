@@ -168,31 +168,7 @@ class _InboxDialogState extends State<InboxDialog> {
             )
           : null,
       onClose: () => Navigator.of(context).pop(),
-      child: !isSignedIn
-          ? const Center(
-              child: Padding(
-                padding: EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.mail_outline_rounded,
-                        color: Color(0xFFB45309), size: 42),
-                    SizedBox(height: 10),
-                    Text(
-                      'Sign in with Google in Settings to receive and claim gifts sent by your friends!',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Color(0xFF3B1404),
-                        fontFamily: 'Fredoka',
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            )
-          : Column(
+      child: Column(
               children: [
                 if (_toastMessage != null)
                   Container(
