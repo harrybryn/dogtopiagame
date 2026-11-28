@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import '../../services/audio_service.dart';
 
@@ -7,6 +8,11 @@ class GenericModal extends StatelessWidget {
   final Widget child;
   final VoidCallback onClose;
   final double maxWidth;
+  final bool highlightClose;
+
+  /// Wrap the body in a vertical scroll view. Use this for fixed-height
+  /// content that could overflow on short screens.
+  final bool scrollable;
 
   const GenericModal({
     super.key,
@@ -15,6 +21,8 @@ class GenericModal extends StatelessWidget {
     required this.child,
     this.titleExtra,
     this.maxWidth = 720,
+    this.highlightClose = false,
+    this.scrollable = false,
   });
 
   @override
@@ -96,31 +104,6 @@ class GenericModal extends StatelessWidget {
                 ),
               ),
 
-              // Close (X) Button positioned exactly over the red 'X' in GenericModal.png
-              Positioned(
-                left: modalW * 0.825,
-                top: modalH * 0.08,
-                width: modalW * 0.09,
-                height: modalW * 0.09,
-                child: MouseRegion(
-                  cursor: SystemMouseCursors.click,
-                  onEnter: (_) => SoundManager.instance.playHover(),
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () {
-                      SoundManager.instance.playClick();
-                      onClose();
-                    },
-                    child: Container(
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.transparent,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-
               // Inner content area inside the parchment frame — bounded for ListViews and scrolls
               Positioned(
                 left: modalW * 0.12,
@@ -131,11 +114,106 @@ class GenericModal extends StatelessWidget {
                   borderRadius: BorderRadius.circular(16),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                    child: child,
+                    child: scrollable
+                        ? SingleChildScrollView(child: child)
+                        : child,
                   ),
                 ),
               ),
+
+              // Close (X) Button placed last in Stack so it is always on top of content
+              Positioned(
+                left: modalW * 0.815,
+                top: modalH * 0.068,
+                width: modalW * 0.11,
+                height: modalW * 0.11,
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  onEnter: (_) => SoundManager.instance.playHover(),
+                  child: Material(
+                    type: MaterialType.transparency,
+                    child: InkWell(
+                      customBorder: const CircleBorder(),
+                      onTap: () {
+                        SoundManager.instance.playClick();
+                        onClose();
+                      },
+                      child: const SizedBox.expand(),
+                    ),
+                  ),
+                ),
+              ),
+
+              if (highlightClose) ...[
+                if ((screenSize.width - modalW) / 2 >= 50)
+                  Positioned(
+                    left: modalW * (0.815 + 0.11) + 6,
+                    top: modalH * 0.068 + (modalW * 0.11 - 72) / 2,
+                    child: const _BouncingExitArrow(horizontal: true),
+                  )
+                else
+                  Positioned(
+                    left: modalW * 0.815 + (modalW * 0.11 - 72) / 2,
+                    top: modalH * 0.068 - 72 - 4,
+                    child: const _BouncingExitArrow(horizontal: false),
+                  ),
+              ],
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BouncingExitArrow extends StatefulWidget {
+  final bool horizontal;
+
+  const _BouncingExitArrow({required this.horizontal});
+
+  @override
+  State<_BouncingExitArrow> createState() => _BouncingExitArrowState();
+}
+
+class _BouncingExitArrowState extends State<_BouncingExitArrow>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 700),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) {
+          final t = Curves.easeInOut.transform(_controller.value);
+          return Transform.translate(
+            offset: widget.horizontal ? Offset(12 * t, 0) : Offset(0, -12 * t),
+            child: child,
+          );
+        },
+        child: Transform.rotate(
+          angle: widget.horizontal ? pi / 2 : 0.0,
+          child: Image.asset(
+            'assets/ui/GenericArrow.png',
+            width: 72,
+            height: 72,
+            fit: BoxFit.contain,
+            filterQuality: FilterQuality.high,
           ),
         ),
       ),

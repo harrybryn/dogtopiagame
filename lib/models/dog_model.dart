@@ -10,10 +10,24 @@ class DogModel {
   String habitatId;
   String habitatName;
   final int adoptedAt;
+  int lastBathedAt;
+  int breedingCooldownEndsAt;
+  bool isInBreeding;
+
+  static const int bathIntervalMs = 2 * 24 * 60 * 60 * 1000; // 2 days
 
   bool get isPuppy => stage == 'Puppy';
   bool get isYoung => stage == 'Young';
   bool get isAdult => stage == 'Adult';
+  bool get isDirty =>
+      (DateTime.now().millisecondsSinceEpoch - lastBathedAt) >= bathIntervalMs;
+  bool get isOnBreedingCooldown =>
+      DateTime.now().millisecondsSinceEpoch < breedingCooldownEndsAt;
+
+  int get breedingCooldownRemainingSeconds {
+    final diff = breedingCooldownEndsAt - DateTime.now().millisecondsSinceEpoch;
+    return diff > 0 ? (diff / 1000).ceil() : 0;
+  }
 
   DogModel({
     required this.id,
@@ -27,7 +41,11 @@ class DogModel {
     required this.habitatId,
     required this.habitatName,
     int? adoptedAt,
-  }) : adoptedAt = adoptedAt ?? DateTime.now().millisecondsSinceEpoch;
+    int? lastBathedAt,
+    this.breedingCooldownEndsAt = 0,
+    this.isInBreeding = false,
+  }) : adoptedAt = adoptedAt ?? DateTime.now().millisecondsSinceEpoch,
+       lastBathedAt = lastBathedAt ?? 0;
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -41,11 +59,14 @@ class DogModel {
         'habitatId': habitatId,
         'habitatName': habitatName,
         'adoptedAt': adoptedAt,
+        'lastBathedAt': lastBathedAt,
+        'breedingCooldownEndsAt': breedingCooldownEndsAt,
+        'isInBreeding': isInBreeding,
       };
 
   factory DogModel.fromJson(Map<String, dynamic> json) {
     final lvl = json['level'] as int? ?? 1;
-    final stageStr = lvl >= 12 ? 'Adult' : (lvl >= 4 ? 'Young' : 'Puppy');
+    final stageStr = lvl >= 12 ? 'Adult' : (lvl >= 6 ? 'Young' : 'Puppy');
     return DogModel(
       id: json['id'] as String? ?? 'dog_${DateTime.now().millisecondsSinceEpoch}',
       breedId: json['breedId'] as String? ?? 'english-bulldog',
@@ -58,6 +79,10 @@ class DogModel {
       habitatId: json['habitatId'] as String? ?? 'hab_starter_garden',
       habitatName: json['habitatName'] as String? ?? 'Garden Park',
       adoptedAt: json['adoptedAt'] as int?,
+      lastBathedAt: json['lastBathedAt'] as int?,
+      breedingCooldownEndsAt:
+          (json['breedingCooldownEndsAt'] as num?)?.toInt() ?? 0,
+      isInBreeding: json['isInBreeding'] as bool? ?? false,
     );
   }
 }

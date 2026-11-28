@@ -18,6 +18,9 @@ class HabitatCatalogItem {
   final String bestFor;
   final Color themeColor;
   final String imageAsset;
+  final int buildDurationSeconds;
+  final String rarity; // 'Common' | 'Uncommon' | 'Rare' | 'Epic' | 'Legendary'
+  final bool isUnique;
 
   const HabitatCatalogItem({
     required this.id,
@@ -37,7 +40,61 @@ class HabitatCatalogItem {
     this.bestFor = '',
     this.themeColor = Colors.amber,
     required this.imageAsset,
+    this.buildDurationSeconds = 60,
+    this.rarity = 'Common',
+    this.isUnique = false,
   });
+
+  int get maxUpgradeLevel =>
+      (type == 'habitat' || id == 'dogfood-factory') ? 3 : 1;
+
+  int upgradeCostForLevel(int currentLevel) {
+    final base = costCoins > 0 ? costCoins : (costCrystals * 150);
+    return (base * (currentLevel + 1) * 1.25).round();
+  }
+
+  int upgradeRequiredPlayerLevel(int currentLevel) {
+    return requiredLevel + currentLevel * 2;
+  }
+
+  int upgradeDurationForLevel(int currentLevel) {
+    // Scales with building rarity, base duration, and target level
+    final multiplier = currentLevel == 1 ? 1.5 : 2.5;
+    return (buildDurationSeconds * multiplier).round().clamp(60, 43200);
+  }
+
+  int maxCoinsForLevel(int level) {
+    if (maxCoins <= 0) return 0;
+    if (level <= 1) return maxCoins;
+    if (level == 2) return (maxCoins * 1.75).round();
+    return (maxCoins * 2.75).round();
+  }
+
+  int maxDogfoodForLevel(int level) {
+    if (maxDogfood <= 0) return 0;
+    if (level <= 1) return maxDogfood;
+    if (level == 2) return (maxDogfood * 1.75).round();
+    return (maxDogfood * 2.75).round();
+  }
+
+  String get formattedBuildTime {
+    if (buildDurationSeconds >= 86400) {
+      final days = buildDurationSeconds ~/ 86400;
+      final hrs = (buildDurationSeconds % 86400) ~/ 3600;
+      return hrs == 0 ? '${days}d' : '${days}d ${hrs}h';
+    }
+    if (buildDurationSeconds >= 3600) {
+      final hrs = buildDurationSeconds ~/ 3600;
+      final mins = (buildDurationSeconds % 3600) ~/ 60;
+      return mins == 0 ? '${hrs}h' : '${hrs}h ${mins}m';
+    }
+    if (buildDurationSeconds >= 60) {
+      final mins = buildDurationSeconds ~/ 60;
+      final secs = buildDurationSeconds % 60;
+      return secs == 0 ? '${mins}m' : '${mins}m ${secs}s';
+    }
+    return '${buildDurationSeconds}s';
+  }
 
   String get assetImage => imageAsset;
   String get element => tagline;
@@ -154,6 +211,8 @@ class HabitatCatalog {
       bestFor: 'English Bulldog, Toy Pug, Japanese Shiba',
       themeColor: Color(0xFFEC4899),
       imageAsset: 'assets/habitats/GardenHabitat.png',
+      buildDurationSeconds: 60,
+      rarity: 'Common',
     ),
     HabitatCatalogItem(
       id: 'desert-oasis',
@@ -164,13 +223,15 @@ class HabitatCatalog {
           'Golden sand dunes, bright blue oasis pond, cacti, and shaded resting canopies. Suited for German Shepherds, Pharaoh Hounds, and Basenjis.',
       sizeW: 3,
       sizeH: 3,
-      costCoins: 1500,
-      requiredLevel: 2,
-      maxCoins: 2500,
+      costCoins: 2000,
+      requiredLevel: 3,
+      maxCoins: 3000,
       coinRate: '120/min',
       bestFor: 'German Shepherd, Pharaoh Hound, Basenji',
       themeColor: Color(0xFFF59E0B),
       imageAsset: 'assets/habitats/OasisHabitat.png',
+      buildDurationSeconds: 900,
+      rarity: 'Uncommon',
     ),
     HabitatCatalogItem(
       id: 'snowy-peak',
@@ -178,16 +239,18 @@ class HabitatCatalog {
       name: 'Snowy Peak',
       tagline: 'Cozy Alpine Frost Haven',
       desc:
-          'Thick snowdrifts, frozen hot springs, and pine shelters. Suited for Bulldog and thick-coated arctic explorers.',
+          'Thick snowdrifts, frozen hot springs, and pine shelters. Suited for Arctic Husky and White Samoyed.',
       sizeW: 3,
       sizeH: 3,
-      costCoins: 1500,
-      requiredLevel: 4,
-      maxCoins: 2500,
-      coinRate: '120/min',
+      costCoins: 4500,
+      requiredLevel: 6,
+      maxCoins: 6000,
+      coinRate: '180/min',
       bestFor: 'Arctic Husky, White Samoyed',
       themeColor: Color(0xFF38BDF8),
       imageAsset: 'assets/habitats/SnowHabitat.png',
+      buildDurationSeconds: 14400,
+      rarity: 'Rare',
     ),
     HabitatCatalogItem(
       id: 'forest-meadow',
@@ -198,13 +261,15 @@ class HabitatCatalog {
           'Lush green grass, oak tree shade, wooden obstacles, and chew toys for energetic hounds.',
       sizeW: 3,
       sizeH: 3,
-      costCoins: 3000,
-      requiredLevel: 6,
-      maxCoins: 5000,
-      coinRate: '250/min',
-      bestFor: 'Hunting Beagle, Golden Retriever',
+      costCoins: 9000,
+      requiredLevel: 10,
+      maxCoins: 12000,
+      coinRate: '300/min',
+      bestFor: 'Forest Beagle, Japanese Shiba',
       themeColor: Color(0xFF22C55E),
       imageAsset: 'assets/habitats/ForestHabitat.png',
+      buildDurationSeconds: 43200,
+      rarity: 'Rare',
     ),
     HabitatCatalogItem(
       id: 'beach-cove',
@@ -215,13 +280,15 @@ class HabitatCatalog {
           'Crystal waves, golden beach sand, surfboards, and splash lagoons for swimmers.',
       sizeW: 3,
       sizeH: 3,
-      costCoins: 6000,
-      requiredLevel: 8,
-      maxCoins: 10000,
-      coinRate: '450/min',
-      bestFor: 'Yellow Labrador, Newfoundland',
+      costCoins: 18000,
+      requiredLevel: 14,
+      maxCoins: 24000,
+      coinRate: '550/min',
+      bestFor: 'Golden Retriever, Labrador Retriever',
       themeColor: Color(0xFF06B6D4),
       imageAsset: 'assets/habitats/BeachHabitat.png',
+      buildDurationSeconds: 86400,
+      rarity: 'Epic',
     ),
     HabitatCatalogItem(
       id: 'legendary-realm',
@@ -232,13 +299,15 @@ class HabitatCatalog {
           'Hovering celestial crystals, stardust fountains, and glowing aura sanctuary for Mythic pups.',
       sizeW: 3,
       sizeH: 3,
-      costCrystals: 45,
-      requiredLevel: 12,
-      maxCoins: 50000,
+      costCrystals: 60,
+      requiredLevel: 20,
+      maxCoins: 75000,
       coinRate: '2000/min',
-      bestFor: 'Cerberus Pup, Galaxy Astral Pup',
+      bestFor: 'Astral Hound, Chronos Dog',
       themeColor: Color(0xFFA855F7),
       imageAsset: 'assets/habitats/LegendaryHabitat.png',
+      buildDurationSeconds: 172800,
+      rarity: 'Legendary',
     ),
 
     // ── Facilities ──
@@ -248,15 +317,19 @@ class HabitatCatalog {
       name: 'Breeding Den',
       tagline: 'Discover secret dog hybrids',
       desc:
-          'Pair two adult dogs to hatch unique hybrid pups (e.g. Husky + Shiba = Snow Fox Shiba)!',
+          'Pair two adult dogs to hatch new pups! Unique sanctuary building (max 1).',
       sizeW: 3,
       sizeH: 3,
-      costCoins: 2500,
+      costCoins: 3500,
+      requiredLevel: 4,
       maxCoins: 0,
       coinRate: 'Hatchery',
-      bestFor: 'All Adult Breeds (Lv 4+)',
+      bestFor: 'All Adult Breeds (Lv 12+)',
       themeColor: Color(0xFFF43F5E),
       imageAsset: 'assets/itemsInShop/building/BreedingDen.webp',
+      buildDurationSeconds: 7200,
+      rarity: 'Rare',
+      isUnique: true,
     ),
     HabitatCatalogItem(
       id: 'water-station',
@@ -273,6 +346,8 @@ class HabitatCatalog {
       bestFor: 'Park-wide hydration',
       themeColor: Color(0xFF3B82F6),
       imageAsset: 'assets/itemsInShop/building/WaterStation.webp',
+      buildDurationSeconds: 120,
+      rarity: 'Common',
     ),
     HabitatCatalogItem(
       id: 'dogfood-factory',
@@ -290,6 +365,8 @@ class HabitatCatalog {
       bestFor: 'All Dog Feeding & Evolution',
       themeColor: Color(0xFFF59E0B),
       imageAsset: 'assets/itemsInShop/building/DogfoodFactory.png',
+      buildDurationSeconds: 600,
+      rarity: 'Uncommon',
     ),
 
     // ── Decorations ──
@@ -307,6 +384,8 @@ class HabitatCatalog {
       bestFor: 'Desert Oasis decor',
       themeColor: Color(0xFFEAB308),
       imageAsset: 'assets/itemsInShop/building/GoldenPalm.webp',
+      buildDurationSeconds: 60,
+      rarity: 'Uncommon',
     ),
     HabitatCatalogItem(
       id: 'bone-sign',
@@ -322,6 +401,8 @@ class HabitatCatalog {
       bestFor: 'Park entrance',
       themeColor: Color(0xFFF97316),
       imageAsset: 'assets/itemsInShop/building/BoneShapeSign.webp',
+      buildDurationSeconds: 30,
+      rarity: 'Common',
     ),
   ];
 
@@ -352,8 +433,8 @@ class HabitatCatalog {
       element: 'Garden Element',
       habitatId: 'garden-park',
       habitatName: 'Garden Park',
-      costCoins: 800,
-      rarity: 'Garden Pup',
+      costCoins: 1200,
+      rarity: 'Common',
       isDefault: false,
       portraitAsset: 'assets/itemsInShop/dogs/PugPuppySit.png',
       sitAsset: 'assets/itemsInShop/dogs/PugPuppySit.png',
@@ -369,12 +450,12 @@ class HabitatCatalog {
       element: 'Snow Element',
       habitatId: 'snowy-peak',
       habitatName: 'Snowy Peak',
-      costCoins: 1200,
-      rarity: 'Frost Pup',
+      costCoins: 3500,
+      rarity: 'Uncommon',
       isDefault: false,
       portraitAsset: 'assets/itemsInShop/dogs/HuskyPuppySit.png',
       sitAsset: 'assets/itemsInShop/dogs/HuskyPuppySit.png',
-      requiredLevel: 2,
+      requiredLevel: 6,
       isLocked: false,
     ),
     DogCatalogItem(
@@ -386,12 +467,12 @@ class HabitatCatalog {
       element: 'Snow Element',
       habitatId: 'snowy-peak',
       habitatName: 'Snowy Peak',
-      costCoins: 1800,
-      rarity: 'Frost Pup',
+      costCoins: 4500,
+      rarity: 'Uncommon',
       isDefault: false,
       portraitAsset: 'assets/itemsInShop/dogs/WhiteSamoyedPuppySit.png',
       sitAsset: 'assets/itemsInShop/dogs/WhiteSamoyedPuppySit.png',
-      requiredLevel: 3,
+      requiredLevel: 8,
       isLocked: false,
     ),
     DogCatalogItem(
@@ -401,14 +482,14 @@ class HabitatCatalog {
       desc:
           'Curious, energetic, and always on the scent of adventure among the dense green canopy of Forest Grove.',
       element: 'Forest Element',
-      habitatId: 'forest-grove',
-      habitatName: 'Forest Grove',
-      costCoins: 2200,
-      rarity: 'Nature Pup',
+      habitatId: 'forest-meadow',
+      habitatName: 'Forest Meadow',
+      costCoins: 6500,
+      rarity: 'Rare',
       isDefault: false,
       portraitAsset: 'assets/itemsInShop/dogs/BeaglePuppySit.png',
       sitAsset: 'assets/itemsInShop/dogs/BeaglePuppySit.png',
-      requiredLevel: 3,
+      requiredLevel: 10,
       isLocked: false,
     ),
     DogCatalogItem(
@@ -418,14 +499,14 @@ class HabitatCatalog {
       desc:
           'Alert, confident, and spirited. Thrives in tranquil woodland shrines and lush forest moss.',
       element: 'Forest Element',
-      habitatId: 'forest-grove',
-      habitatName: 'Forest Grove',
-      costCoins: 2800,
-      rarity: 'Nature Pup',
+      habitatId: 'forest-meadow',
+      habitatName: 'Forest Meadow',
+      costCoins: 8000,
+      rarity: 'Rare',
       isDefault: false,
       portraitAsset: 'assets/itemsInShop/dogs/ShibaPuppySit.png',
       sitAsset: 'assets/itemsInShop/dogs/ShibaPuppySit.png',
-      requiredLevel: 4,
+      requiredLevel: 12,
       isLocked: false,
     ),
     DogCatalogItem(
@@ -437,12 +518,12 @@ class HabitatCatalog {
       element: 'Desert Element',
       habitatId: 'desert-oasis',
       habitatName: 'Desert Oasis',
-      costCoins: 3500,
-      rarity: 'Desert Pup',
+      costCoins: 2400,
+      rarity: 'Epic',
       isDefault: false,
       portraitAsset: 'assets/itemsInShop/dogs/GermanPuppySit.png',
       sitAsset: 'assets/itemsInShop/dogs/GermanPuppySit.png',
-      requiredLevel: 4,
+      requiredLevel: 3,
       isLocked: false,
     ),
     DogCatalogItem(
@@ -454,8 +535,8 @@ class HabitatCatalog {
       element: 'Desert Element',
       habitatId: 'desert-oasis',
       habitatName: 'Desert Oasis',
-      costCoins: 4200,
-      rarity: 'Desert Pup',
+      costCoins: 3200,
+      rarity: 'Epic',
       isDefault: false,
       portraitAsset: 'assets/itemsInShop/dogs/PharaohPuppySit.png',
       sitAsset: 'assets/itemsInShop/dogs/PharaohPuppySit.png',
@@ -469,14 +550,14 @@ class HabitatCatalog {
       desc:
           'Enthusiastic, cheerful, and loves splashing in turquoise cove waters and fetching coconuts on the beach!',
       element: 'Beach Element',
-      habitatId: 'tropical-cove',
-      habitatName: 'Tropical Cove',
-      costCoins: 5000,
-      rarity: 'Ocean Pup',
+      habitatId: 'beach-cove',
+      habitatName: 'Beach Cove',
+      costCoins: 11000,
+      rarity: 'Epic',
       isDefault: false,
       portraitAsset: 'assets/itemsInShop/dogs/GoldenRetrieverPuppySit.png',
       sitAsset: 'assets/itemsInShop/dogs/GoldenRetrieverPuppySit.png',
-      requiredLevel: 5,
+      requiredLevel: 14,
       isLocked: false,
     ),
     DogCatalogItem(
@@ -486,14 +567,14 @@ class HabitatCatalog {
       desc:
           'Gentle water-lover with boundless spirit. Masters diving in tropical reefs and basking on warm island sand.',
       element: 'Beach Element',
-      habitatId: 'tropical-cove',
-      habitatName: 'Tropical Cove',
-      costCoins: 6000,
-      rarity: 'Ocean Pup',
+      habitatId: 'beach-cove',
+      habitatName: 'Beach Cove',
+      costCoins: 14000,
+      rarity: 'Epic',
       isDefault: false,
       portraitAsset: 'assets/itemsInShop/dogs/LabradorPuppySit.png',
       sitAsset: 'assets/itemsInShop/dogs/LabradorPuppySit.png',
-      requiredLevel: 6,
+      requiredLevel: 16,
       isLocked: false,
     ),
     DogCatalogItem(
@@ -503,15 +584,15 @@ class HabitatCatalog {
       desc:
           'A mythical hound born from fallen constellations. Glows with ethereal starlight across the heavens.',
       element: 'Legendary Element',
-      habitatId: 'celestial-sanctuary',
-      habitatName: 'Celestial Sanctuary',
-      costCoins: 10000,
-      costCrystals: 50,
+      habitatId: 'legendary-realm',
+      habitatName: 'Legendary Realm',
+      costCoins: 25000,
+      costCrystals: 60,
       rarity: 'Legendary',
       isDefault: false,
       portraitAsset: 'assets/itemsInShop/dogs/AstralPuppySit.png',
       sitAsset: 'assets/itemsInShop/dogs/AstralPuppySit.png',
-      requiredLevel: 8,
+      requiredLevel: 20,
       isLocked: false,
     ),
     DogCatalogItem(
@@ -521,15 +602,15 @@ class HabitatCatalog {
       desc:
           'Master of cosmic timelines and ancient celestial rings. A fabled legend revered by all dog-kind.',
       element: 'Legendary Element',
-      habitatId: 'celestial-sanctuary',
-      habitatName: 'Celestial Sanctuary',
-      costCoins: 15000,
+      habitatId: 'legendary-realm',
+      habitatName: 'Legendary Realm',
+      costCoins: 35000,
       costCrystals: 100,
-      rarity: 'Mythic',
+      rarity: 'Legendary',
       isDefault: false,
       portraitAsset: 'assets/itemsInShop/dogs/ChronosPuppySit.png',
       sitAsset: 'assets/itemsInShop/dogs/ChronosPuppySit.png',
-      requiredLevel: 10,
+      requiredLevel: 22,
       isLocked: false,
     ),
   ];
@@ -552,32 +633,79 @@ class HabitatCatalog {
     final b = breedOrElement.toLowerCase();
     final h = habitatCatalogId.toLowerCase();
 
-    // Snow element / Husky / Samoyed
+    // Snow element / Husky / Samoyed -> Snowy Peak only
     if (b.contains('husky') || b.contains('snow') || b.contains('samoyed')) {
-      return h.contains('snow') || h.contains('garden');
+      return h.contains('snow');
     }
-    // Bulldog / Pug / Garden
+    // Garden element / Bulldog / Pug -> Garden Park only
     if (b.contains('bulldog') || b.contains('garden') || b.contains('pug')) {
-      return h.contains('garden') || h.contains('snow');
+      return h.contains('garden');
     }
-    // Desert / Oasis / German / Pharaoh
-    if (b.contains('desert') || b.contains('oasis') || b.contains('shepherd') || b.contains('german') || b.contains('pharaoh')) {
+    // Desert element / German Shepherd / Pharaoh Hound -> Desert Oasis only
+    if (b.contains('desert') ||
+        b.contains('oasis') ||
+        b.contains('shepherd') ||
+        b.contains('german') ||
+        b.contains('pharaoh')) {
       return h.contains('desert') || h.contains('oasis');
     }
-    // Forest / Meadow / Beagle / Shiba
-    if (b.contains('forest') || b.contains('meadow') || b.contains('beagle') || b.contains('shiba')) {
+    // Forest element / Beagle / Shiba -> Forest Meadow only
+    if (b.contains('forest') ||
+        b.contains('meadow') ||
+        b.contains('beagle') ||
+        b.contains('shiba')) {
       return h.contains('forest') || h.contains('meadow');
     }
-    // Beach / Cove / Labrador / Golden
-    if (b.contains('beach') || b.contains('cove') || b.contains('water') || b.contains('labrador') || b.contains('golden')) {
+    // Beach element / Labrador / Golden Retriever -> Beach Cove only
+    if (b.contains('beach') ||
+        b.contains('cove') ||
+        b.contains('water') ||
+        b.contains('labrador') ||
+        b.contains('golden')) {
       return h.contains('beach') || h.contains('cove');
     }
-    // Legendary / Astral / Chronos
-    if (b.contains('legend') || b.contains('astral') || b.contains('chronos') || b.contains('celestial')) {
+    // Legendary element / Astral / Chronos -> Legendary Realm only
+    if (b.contains('legend') ||
+        b.contains('astral') ||
+        b.contains('chronos') ||
+        b.contains('celestial')) {
       return h.contains('legend') || h.contains('celestial');
     }
 
     return h == b;
+  }
+
+  static String requiredHabitatNameForDog({String? breedId, String? element}) {
+    final b = '${breedId ?? ''} ${element ?? ''}'.toLowerCase();
+    if (b.contains('husky') || b.contains('snow') || b.contains('samoyed')) {
+      return 'Snowy Peak';
+    }
+    if (b.contains('desert') ||
+        b.contains('oasis') ||
+        b.contains('shepherd') ||
+        b.contains('german') ||
+        b.contains('pharaoh')) {
+      return 'Desert Oasis';
+    }
+    if (b.contains('forest') ||
+        b.contains('meadow') ||
+        b.contains('beagle') ||
+        b.contains('shiba')) {
+      return 'Forest Meadow';
+    }
+    if (b.contains('beach') ||
+        b.contains('cove') ||
+        b.contains('labrador') ||
+        b.contains('golden')) {
+      return 'Beach Cove';
+    }
+    if (b.contains('legend') ||
+        b.contains('astral') ||
+        b.contains('chronos') ||
+        b.contains('celestial')) {
+      return 'Legendary Realm';
+    }
+    return 'Garden Park';
   }
 
   static bool isHabitatCompatible({

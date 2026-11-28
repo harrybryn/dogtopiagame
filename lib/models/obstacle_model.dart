@@ -73,7 +73,7 @@ class ObstacleModel {
         sizeW: 1,
         sizeH: 1,
         clearCost: 150,
-        clearDuration: 8,
+        clearDuration: 25,
         xpReward: 20,
         imageAsset: 'assets/ui/RockObstacle.png',
       ),
@@ -86,7 +86,7 @@ class ObstacleModel {
         sizeW: 1,
         sizeH: 1,
         clearCost: 200,
-        clearDuration: 10,
+        clearDuration: 35,
         xpReward: 25,
         imageAsset: 'assets/ui/TreeObstacle.png',
       ),
@@ -99,7 +99,7 @@ class ObstacleModel {
         sizeW: 2,
         sizeH: 2,
         clearCost: 350,
-        clearDuration: 14,
+        clearDuration: 60,
         xpReward: 40,
         imageAsset: 'assets/ui/TreeAndRocksObstacle.png',
       ),
@@ -107,12 +107,12 @@ class ObstacleModel {
         id: 'obs_rock_lot1_2',
         type: 'rock',
         name: 'Ancient Boulder',
-        col: 3,
-        row: 2,
+        col: 7,
+        row: 6,
         sizeW: 1,
         sizeH: 1,
         clearCost: 180,
-        clearDuration: 9,
+        clearDuration: 30,
         xpReward: 22,
         imageAsset: 'assets/ui/RockObstacle.png',
       ),
@@ -120,12 +120,12 @@ class ObstacleModel {
         id: 'obs_tree_lot1_2',
         type: 'tree',
         name: 'Wild Island Tree',
-        col: 6,
-        row: 1,
+        col: 10,
+        row: 4,
         sizeW: 1,
         sizeH: 1,
         clearCost: 220,
-        clearDuration: 11,
+        clearDuration: 42,
         xpReward: 28,
         imageAsset: 'assets/ui/TreeObstacle.png',
       ),
@@ -140,7 +140,7 @@ class ObstacleModel {
         sizeW: 1,
         sizeH: 1,
         clearCost: 300,
-        clearDuration: 14,
+        clearDuration: 55,
         xpReward: 35,
         imageAsset: 'assets/ui/TreeObstacle.png',
       ),
@@ -153,7 +153,7 @@ class ObstacleModel {
         sizeW: 2,
         sizeH: 2,
         clearCost: 500,
-        clearDuration: 18,
+        clearDuration: 110,
         xpReward: 55,
         imageAsset: 'assets/ui/TreeAndRocksObstacle.png',
       ),
@@ -166,7 +166,7 @@ class ObstacleModel {
         sizeW: 1,
         sizeH: 1,
         clearCost: 350,
-        clearDuration: 15,
+        clearDuration: 50,
         xpReward: 40,
         imageAsset: 'assets/ui/RockObstacle.png',
       ),
@@ -179,7 +179,7 @@ class ObstacleModel {
         sizeW: 1,
         sizeH: 1,
         clearCost: 400,
-        clearDuration: 16,
+        clearDuration: 65,
         xpReward: 45,
         imageAsset: 'assets/ui/TreeObstacle.png',
       ),
@@ -192,7 +192,7 @@ class ObstacleModel {
         sizeW: 1,
         sizeH: 1,
         clearCost: 280,
-        clearDuration: 13,
+        clearDuration: 45,
         xpReward: 32,
         imageAsset: 'assets/ui/RockObstacle.png',
       ),
@@ -205,7 +205,7 @@ class ObstacleModel {
         sizeW: 2,
         sizeH: 2,
         clearCost: 450,
-        clearDuration: 17,
+        clearDuration: 90,
         xpReward: 50,
         imageAsset: 'assets/ui/TreeAndRocksObstacle.png',
       ),
@@ -215,12 +215,12 @@ class ObstacleModel {
         id: 'obs_rock_lot1_extra1',
         type: 'rock',
         name: 'Ancient Boulder',
-        col: 2,
-        row: 7,
+        col: 6,
+        row: 8,
         sizeW: 1,
         sizeH: 1,
         clearCost: 160,
-        clearDuration: 8,
+        clearDuration: 28,
         xpReward: 20,
         imageAsset: 'assets/ui/RockObstacle.png',
       ),
@@ -233,7 +233,7 @@ class ObstacleModel {
         sizeW: 1,
         sizeH: 1,
         clearCost: 220,
-        clearDuration: 10,
+        clearDuration: 40,
         xpReward: 26,
         imageAsset: 'assets/ui/TreeObstacle.png',
       ),
@@ -241,12 +241,12 @@ class ObstacleModel {
         id: 'obs_treerock_lot1_extra3',
         type: 'tree_rock',
         name: 'Rocky Grove',
-        col: 1,
-        row: 2,
+        col: 3,
+        row: 6,
         sizeW: 2,
         sizeH: 2,
         clearCost: 340,
-        clearDuration: 13,
+        clearDuration: 75,
         xpReward: 38,
         imageAsset: 'assets/ui/TreeAndRocksObstacle.png',
       ),
@@ -254,12 +254,12 @@ class ObstacleModel {
         id: 'obs_rock_lot1_extra4',
         type: 'rock',
         name: 'Ancient Boulder',
-        col: 11,
-        row: 6,
+        col: 9,
+        row: 2,
         sizeW: 1,
         sizeH: 1,
         clearCost: 190,
-        clearDuration: 9,
+        clearDuration: 32,
         xpReward: 24,
         imageAsset: 'assets/ui/RockObstacle.png',
       ),
@@ -269,12 +269,12 @@ class ObstacleModel {
         id: 'obs_tree_lot2_extra1',
         type: 'tree',
         name: 'Wild Island Tree',
-        col: 24,
+        col: 21,
         row: 2,
         sizeW: 1,
         sizeH: 1,
         clearCost: 310,
-        clearDuration: 13,
+        clearDuration: 60,
         xpReward: 36,
         imageAsset: 'assets/ui/TreeObstacle.png',
       ),
@@ -287,7 +287,7 @@ class ObstacleModel {
         sizeW: 1,
         sizeH: 1,
         clearCost: 350,
-        clearDuration: 14,
+        clearDuration: 55,
         xpReward: 40,
         imageAsset: 'assets/ui/RockObstacle.png',
       ),
@@ -295,12 +295,12 @@ class ObstacleModel {
         id: 'obs_treerock_lot2_extra3',
         type: 'tree_rock',
         name: 'Rocky Grove',
-        col: 13,
+        col: 16,
         row: 7,
         sizeW: 2,
         sizeH: 2,
         clearCost: 480,
-        clearDuration: 18,
+        clearDuration: 120,
         xpReward: 54,
         imageAsset: 'assets/ui/TreeAndRocksObstacle.png',
       ),
@@ -308,15 +308,162 @@ class ObstacleModel {
         id: 'obs_rock_lot2_extra4',
         type: 'rock',
         name: 'Ancient Boulder',
-        col: 24,
-        row: 7,
+        col: 22,
+        row: 6,
         sizeW: 1,
         sizeH: 1,
         clearCost: 290,
-        clearDuration: 12,
+        clearDuration: 48,
         xpReward: 32,
         imageAsset: 'assets/ui/RockObstacle.png',
       ),
     ];
+  }
+
+  static const Map<String, Map<String, ({String asset, String name})>>
+  _islandThemes = {
+    'desert': {
+      'rock': (
+        asset: 'assets/ui/DessertRockObstacle.png',
+        name: 'Desert Boulder',
+      ),
+      'tree': (
+        asset: 'assets/ui/DessertBigCactusObstacle.png',
+        name: 'Giant Saguaro Cactus',
+      ),
+      'tree_rock': (
+        asset: 'assets/ui/DessertRockBushObstacle.png',
+        name: 'Desert Scrub & Rocks',
+      ),
+    },
+    'ice': {
+      'rock': (
+        asset: 'assets/ui/IceRockObstacle.png',
+        name: 'Frozen Boulder',
+      ),
+      'tree': (
+        asset: 'assets/ui/IcePineTreeObstacle.png',
+        name: 'Frosty Pine Tree',
+      ),
+      'tree_rock': (
+        asset: 'assets/ui/IceSpikeRockObstacle.png',
+        name: 'Glacial Spike Rocks',
+      ),
+    },
+    'beach': {
+      'rock': (
+        asset: 'assets/ui/BeachRockObstacle.png',
+        name: 'Coastal Boulder',
+      ),
+      'tree': (
+        asset: 'assets/ui/BeachPalmTreeObstacle.png',
+        name: 'Tropical Palm Tree',
+      ),
+      'tree_rock': (
+        asset: 'assets/ui/BeachWreckObstacle.png',
+        name: 'Washed-Up Shipwreck',
+      ),
+    },
+    'legendary': {
+      'rock': (
+        asset: 'assets/ui/LegendarySpikeObstacle.png',
+        name: 'Arcane Crystal Spikes',
+      ),
+      'tree': (
+        asset: 'assets/ui/LegendaryPillarObstacle.png',
+        name: 'Ancient Rune Pillar',
+      ),
+      'tree_rock': (
+        asset: 'assets/ui/LegendaryArcObstacle.png',
+        name: 'Mythic Stone Arch',
+      ),
+    },
+  };
+
+  /// Returns default obstacles themed for [islandId].
+  static List<ObstacleModel> defaultObstaclesForIsland(String islandId) {
+    final base = defaultObstacles();
+    if (!_islandThemes.containsKey(islandId)) return base;
+    return base.map((obs) => _applyIslandTheme(obs, islandId)).toList();
+  }
+
+  static ObstacleModel _applyIslandTheme(ObstacleModel obs, String islandId) {
+    final theme = _islandThemes[islandId];
+    if (theme == null) return obs;
+    final variant = theme[obs.type] ?? theme['rock']!;
+    return ObstacleModel(
+      id: obs.id,
+      type: obs.type,
+      name: variant.name,
+      col: obs.col,
+      row: obs.row,
+      sizeW: obs.sizeW,
+      sizeH: obs.sizeH,
+      clearCost: obs.clearCost,
+      clearDuration: obs.clearDuration,
+      xpReward: obs.xpReward,
+      imageAsset: variant.asset,
+      isClearing: obs.isClearing,
+      clearingEndsAt: obs.clearingEndsAt,
+    );
+  }
+
+  /// Ensures any saved default obstacles that were previously placed on an
+  /// island edge or lot fence are relocated to their updated interior coords,
+  /// and upgrades Desert island obstacles to desert-themed assets.
+  static List<ObstacleModel> sanitizeSavedObstacles(
+    List<ObstacleModel> saved, {
+    String? islandId,
+  }) {
+    final defaultsById = {for (final d in defaultObstacles()) d.id: d};
+    return saved.map((obs) {
+      var updated = obs;
+      final def = defaultsById[obs.id];
+      if (def != null) {
+        final onEdgeOrFence =
+            obs.col + obs.row <= 4 ||
+            obs.col - obs.row >= 21 ||
+            obs.col == 12 ||
+            obs.col == 13 ||
+            obs.row == 10 ||
+            (obs.row <= 3 && obs.col <= 7) ||
+            (obs.id == 'obs_rock_lot1_extra1' &&
+                ((obs.col == 2 && obs.row == 7) ||
+                    (obs.col == 4 && obs.row == 8))) ||
+            (obs.id == 'obs_rock_lot1_extra4' &&
+                obs.col == 11 &&
+                obs.row == 6) ||
+            (obs.id == 'obs_treerock_lot1_extra3' &&
+                obs.col == 2 &&
+                obs.row == 5) ||
+            (obs.id == 'obs_rock_lot2_extra4' &&
+                obs.col == 24 &&
+                obs.row == 7);
+        if (onEdgeOrFence || (!obs.isClearing && obs.clearDuration != def.clearDuration)) {
+          updated = ObstacleModel(
+            id: obs.id,
+            type: obs.type,
+            name: obs.name,
+            col: onEdgeOrFence ? def.col : obs.col,
+            row: onEdgeOrFence ? def.row : obs.row,
+            sizeW: obs.sizeW,
+            sizeH: obs.sizeH,
+            clearCost: obs.clearCost,
+            clearDuration: def.clearDuration,
+            xpReward: obs.xpReward,
+            imageAsset: obs.imageAsset,
+            isClearing: obs.isClearing,
+            clearingEndsAt: obs.clearingEndsAt,
+          );
+        }
+      }
+      if (islandId != null && _islandThemes.containsKey(islandId)) {
+        final expectedAsset = _islandThemes[islandId]?[updated.type]?.asset;
+        if (expectedAsset != null && updated.imageAsset != expectedAsset) {
+          updated = _applyIslandTheme(updated, islandId);
+        }
+      }
+      return updated;
+    }).toList();
   }
 }

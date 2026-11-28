@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import '../models/habitat_model.dart';
 import '../models/food_recipe_model.dart';
+import '../models/walkthrough_step.dart';
 import '../state/game_controller.dart';
 import '../components/common/hover_scale.dart';
 
@@ -10,12 +11,14 @@ class DogFactoryInsidePage extends StatefulWidget {
   final GameController game;
   final HabitatModel habitat;
   final VoidCallback onBackToWorld;
+  final Map<String, GlobalKey>? walkthroughKeys;
 
   const DogFactoryInsidePage({
     super.key,
     required this.game,
     required this.habitat,
     required this.onBackToWorld,
+    this.walkthroughKeys,
   });
 
   @override
@@ -27,9 +30,14 @@ class _DogFactoryInsidePageState extends State<DogFactoryInsidePage> {
   String? _toastMessage;
   bool _showRecipesWhileBaking = false;
 
+  final ScrollController _recipeScrollController = ScrollController();
+  bool _recipesAtBottom = false;
+
   @override
   void initState() {
     super.initState();
+    _recipeScrollController.addListener(_onRecipesScroll);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _onRecipesScroll());
     _oneSecTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) {
         setState(() {});
@@ -40,7 +48,65 @@ class _DogFactoryInsidePageState extends State<DogFactoryInsidePage> {
   @override
   void dispose() {
     _oneSecTimer?.cancel();
+    _recipeScrollController.removeListener(_onRecipesScroll);
+    _recipeScrollController.dispose();
     super.dispose();
+  }
+
+  void _onRecipesScroll() {
+    if (!_recipeScrollController.hasClients) return;
+    final atBottom = _recipeScrollController.position.extentAfter <= 8;
+    if (atBottom != _recipesAtBottom && mounted) {
+      setState(() => _recipesAtBottom = atBottom);
+    }
+  }
+
+  /// Persistent "more recipes below" cue for the recipe grid.
+  Widget _buildRecipeScrollHint() {
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: 0,
+      child: IgnorePointer(
+        child: Container(
+          height: 56,
+          alignment: Alignment.bottomCenter,
+          padding: const EdgeInsets.only(bottom: 4),
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Colors.transparent, Color(0xCC160702)],
+            ),
+          ),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+            decoration: BoxDecoration(
+              color: const Color(0xEE451A03),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFFBBF24), width: 1.2),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'MORE RECIPES BELOW',
+                  style: TextStyle(
+                    color: Color(0xFFFEF08A),
+                    fontFamily: 'Lilita One',
+                    fontSize: 10,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                SizedBox(width: 4),
+                Icon(Icons.keyboard_arrow_down_rounded,
+                    size: 14, color: Color(0xFFFBBF24)),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   void _showToast(String msg) {
@@ -52,7 +118,6 @@ class _DogFactoryInsidePageState extends State<DogFactoryInsidePage> {
 
   String _fmt(int n) {
     if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
-    if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}K';
     return n.toString().replaceAllMapped(
           RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
           (Match m) => '${m[1]},',
@@ -185,6 +250,12 @@ class _DogFactoryInsidePageState extends State<DogFactoryInsidePage> {
     final isReadyToCollect = hab.readyToCollectDogfood &&
         (hab.dogfoodAccumulated > 0 || (hab.bakingFoodAmount ?? 0) > 0);
 
+    final media = MediaQuery.of(context);
+    final screenW = media.size.width;
+    final isCompact = screenW < 880;
+    final pillW = isCompact ? 112.0 : 138.0;
+    final pillH = isCompact ? 36.0 : 44.0;
+
     return Scaffold(
       backgroundColor: const Color(0xFF160702),
       body: Stack(
@@ -202,129 +273,67 @@ class _DogFactoryInsidePageState extends State<DogFactoryInsidePage> {
           // Subtle dark vignette to ensure readability
           Positioned.fill(
             child: Container(
-              color: Colors.black.withOpacity(0.35),
+              color: Colors.black.withValues(alpha: 0.35),
             ),
           ),
 
           // ── 2. Top Navigation & Resource Bar ──
-          // Top Left: Back to Island Button
-          Positioned(
-            top: 14,
-            left: 20,
-            child: HoverScale(
-              scale: 1.06,
-              onTap: widget.onBackToWorld,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFFFEF08A), Color(0xFFF59E0B)],
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                  ),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFFD97706), width: 2.0),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x66D97706),
-                      blurRadius: 8,
-                      offset: Offset(0, 3),
-                    ),
-                  ],
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.arrow_back_ios_new_rounded,
-                        size: 13, color: Color(0xFF3B1404)),
-                    SizedBox(width: 6),
-                    Text(
-                      'BACK TO ISLAND',
-                      style: TextStyle(
-                        color: Color(0xFF3B1404),
-                        fontFamily: 'Lilita One',
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-
-          // Top Right: Resource Counter Pills
-          Positioned(
-            top: 14,
-            right: 20,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _buildWoodResourcePill(
-                  iconAsset: 'assets/ui/diamonds.png',
-                  value: '${widget.game.crystals}',
-                ),
-                const SizedBox(width: 8),
-                _buildWoodResourcePill(
-                  iconAsset: 'assets/ui/coins.png',
-                  value: _fmt(widget.game.coins),
-                ),
-                const SizedBox(width: 8),
-                _buildWoodResourcePill(
-                  iconAsset: 'assets/ui/dogfood.png',
-                  value: _fmt(widget.game.kibble),
-                ),
-              ],
-            ),
-          ),
-
-          // Top Center Title Plaque
           Positioned(
             top: 10,
-            left: 0,
-            right: 0,
-            child: Center(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 6),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF451A03), Color(0xFF200A02)],
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                  ),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: const Color(0xFFFBBF24), width: 2.5),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x99000000),
-                      blurRadius: 10,
-                      offset: Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Image.asset(
-                      'assets/ui/dogfood.png',
-                      width: 24,
-                      height: 24,
-                      fit: BoxFit.contain,
-                    ),
-                    const SizedBox(width: 8),
-                    const Text(
-                      'DOG FOOD FACTORY & BAKERY',
-                      style: TextStyle(
-                        color: Color(0xFFFEF08A),
-                        fontFamily: 'Lilita One',
-                        fontSize: 16,
-                        letterSpacing: 0.8,
+            left: 14,
+            right: 14,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                _buildBackButton(isCompact: isCompact),
+                Expanded(
+                  flex: isCompact ? 2 : 1,
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: _buildTitlePlaque(isCompact: isCompact),
                       ),
                     ),
-                  ],
+                  ),
                 ),
-              ),
+                Flexible(
+                  flex: isCompact ? 3 : 0,
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerRight,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _buildWoodResourcePill(
+                            iconAsset: 'assets/ui/diamonds.png',
+                            value: '${widget.game.crystals}',
+                            pillW: pillW,
+                            pillH: pillH,
+                          ),
+                          SizedBox(width: isCompact ? 6 : 8),
+                          _buildWoodResourcePill(
+                            iconAsset: 'assets/ui/coins.png',
+                            value: _fmt(widget.game.coins),
+                            pillW: pillW,
+                            pillH: pillH,
+                          ),
+                          SizedBox(width: isCompact ? 6 : 8),
+                          _buildWoodResourcePill(
+                            iconAsset: 'assets/ui/dogfood.png',
+                            value: _fmt(widget.game.kibble),
+                            pillW: pillW,
+                            pillH: pillH,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
 
@@ -332,8 +341,8 @@ class _DogFactoryInsidePageState extends State<DogFactoryInsidePage> {
           Positioned.fill(
             top: 68,
             bottom: 12,
-            left: 20,
-            right: 20,
+            left: isCompact ? 12 : 20,
+            right: isCompact ? 12 : 20,
             child: Center(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 960),
@@ -380,18 +389,131 @@ class _DogFactoryInsidePageState extends State<DogFactoryInsidePage> {
     );
   }
 
+  Widget _buildBackButton({required bool isCompact}) {
+    return HoverScale(
+      key: widget.walkthroughKeys?[WalkthroughTargets.factoryBackButton],
+      scale: 1.06,
+      onTap: widget.onBackToWorld,
+      child: Container(
+        padding: EdgeInsets.symmetric(
+            horizontal: isCompact ? 10 : 14, vertical: isCompact ? 6 : 7),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFFFEF08A), Color(0xFFF59E0B)],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFD97706), width: 2.0),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x66D97706),
+              blurRadius: 8,
+              offset: Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.arrow_back_ios_new_rounded,
+                size: 13, color: Color(0xFF3B1404)),
+            const SizedBox(width: 5),
+            Text(
+              isCompact ? 'BACK' : 'BACK TO ISLAND',
+              style: const TextStyle(
+                color: Color(0xFF3B1404),
+                fontFamily: 'Lilita One',
+                fontSize: 12.0,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTitlePlaque({required bool isCompact}) {
+    return Container(
+      padding: EdgeInsets.symmetric(
+          horizontal: isCompact ? 12 : 22, vertical: isCompact ? 5 : 6),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF451A03), Color(0xFF200A02)],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFFBBF24), width: 2.2),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x99000000),
+            blurRadius: 10,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Image.asset(
+            'assets/ui/dogfood.png',
+            width: isCompact ? 18 : 24,
+            height: isCompact ? 18 : 24,
+            fit: BoxFit.contain,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            isCompact ? 'KIBBLE BAKERY' : 'DOG FOOD FACTORY & BAKERY',
+            style: TextStyle(
+              color: const Color(0xFFFEF08A),
+              fontFamily: 'Lilita One',
+              fontSize: isCompact ? 13 : 16,
+              letterSpacing: 0.8,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildWoodResourcePill({
     required String iconAsset,
     required String value,
+    double pillW = 140.0,
+    double pillH = 38.0,
   }) {
-    const double pillW = 140.0;
-    const double pillH = 38.0;
+    final double iconSize = (pillH * 0.52).clamp(16.0, 24.0);
+    final double plusSize = (pillH * 0.46).clamp(16.0, 22.0);
+    final double fontSize = (pillH * 0.34).clamp(12.0, 15.0);
+
     return SizedBox(
       width: pillW,
       height: pillH,
       child: Stack(
+        clipBehavior: Clip.none,
         alignment: Alignment.center,
         children: [
+          Positioned(
+            left: pillW * 0.04,
+            right: pillW * 0.04,
+            top: pillH * 0.14,
+            bottom: pillH * 0.06,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(pillH * 0.45),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x66000000),
+                    blurRadius: 8,
+                    offset: Offset(0, 4),
+                  ),
+                ],
+              ),
+            ),
+          ),
           Positioned.fill(
             child: Image.asset(
               'assets/ui/ResourcesPlaceHolder.webp',
@@ -400,10 +522,10 @@ class _DogFactoryInsidePageState extends State<DogFactoryInsidePage> {
             ),
           ),
           Positioned(
-            left: pillW * 0.10,
-            top: pillH * 0.50 - 11,
-            width: 22,
-            height: 22,
+            left: pillW * 0.18 - iconSize / 2,
+            top: (pillH - iconSize) / 2,
+            width: iconSize,
+            height: iconSize,
             child: Image.asset(
               iconAsset,
               fit: BoxFit.contain,
@@ -411,49 +533,72 @@ class _DogFactoryInsidePageState extends State<DogFactoryInsidePage> {
             ),
           ),
           Positioned(
-            left: pillW * 0.34,
-            right: pillW * 0.08,
+            left: pillW * 0.28,
+            right: pillW * 0.28,
             top: 0,
             bottom: 0,
             child: Center(
-              child: Text(
-                value,
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w900,
-                  fontSize: 14.0,
-                  fontFamily: 'Lilita One',
-                  letterSpacing: 0.4,
-                  shadows: [
-                    Shadow(
-                      color: Color(0xFF3B1404),
-                      offset: Offset(0, 1.5),
-                      blurRadius: 1,
-                    ),
-                    Shadow(
-                      color: Colors.black,
-                      offset: Offset(0, 2),
-                      blurRadius: 3,
-                    ),
-                  ],
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  value,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                    fontSize: fontSize,
+                    fontFamily: 'Lilita One',
+                    letterSpacing: 0.4,
+                    shadows: const [
+                      Shadow(
+                        color: Color(0xFF3B1404),
+                        offset: Offset(0, 1.5),
+                        blurRadius: 1,
+                      ),
+                      Shadow(
+                        color: Colors.black,
+                        offset: Offset(0, 2),
+                        blurRadius: 3,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
           Positioned(
-            right: 2,
-            top: pillH * 0.50 - 9,
-            width: 18,
-            height: 18,
-            child: Container(
-              decoration: const BoxDecoration(
-                color: Color(0xFFD97706),
-                shape: BoxShape.circle,
+            left: pillW * 0.82 - plusSize / 2,
+            top: (pillH - plusSize) / 2,
+            width: plusSize,
+            height: plusSize,
+            child: HoverScale(
+              scale: 1.12,
+              onTap: widget.onBackToWorld,
+              child: Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF4ADE80), Color(0xFF16A34A)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  border: Border.all(color: const Color(0xFFDCFCE7), width: 1.2),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x66000000),
+                      offset: Offset(0, 1.5),
+                      blurRadius: 2,
+                    ),
+                  ],
+                ),
+                alignment: Alignment.center,
+                child: Icon(
+                  Icons.add_rounded,
+                  color: Colors.white,
+                  size: plusSize * 0.72,
+                ),
               ),
-              child: const Icon(Icons.add, color: Colors.white, size: 12),
             ),
           ),
         ],
@@ -463,15 +608,50 @@ class _DogFactoryInsidePageState extends State<DogFactoryInsidePage> {
 
   Widget _buildMainContent(HabitatModel hab, bool isBaking, bool isReadyToCollect) {
     if (isReadyToCollect) {
-      return _buildReadyToCollectView(hab);
+      return _scrollableCenter(_buildReadyToCollectView(hab));
     }
 
     if (isBaking && !_showRecipesWhileBaking) {
-      return _buildBakingInProgressView(hab);
+      return _scrollableCenter(_buildBakingInProgressView(hab));
     }
 
     // Default or browsing mode: Show the 6 Food Recipes!
     return _buildRecipeSelectionView(hab, isBaking);
+  }
+
+  /// Centers a fixed-size panel and lets it scroll instead of overflowing
+  /// when the window is short.
+  Widget _scrollableCenter(Widget child) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final size = MediaQuery.of(context).size;
+        final compact = size.width < 880 || size.height < 560;
+        final panelWidth = constraints.maxWidth < 520 ? constraints.maxWidth : 520.0;
+        final panel = compact
+            ? SizedBox(
+                width: constraints.maxWidth,
+                height: constraints.maxHeight,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.center,
+                  child: SizedBox(width: panelWidth, child: child),
+                ),
+              )
+            : child;
+
+        return Scrollbar(
+          controller: _recipeScrollController,
+          thumbVisibility: true,
+          child: SingleChildScrollView(
+            controller: _recipeScrollController,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: Center(child: panel),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   // ── Mode 1: Ready to Collect ──
@@ -603,6 +783,7 @@ class _DogFactoryInsidePageState extends State<DogFactoryInsidePage> {
           ),
           const SizedBox(height: 24),
           HoverScale(
+            key: widget.walkthroughKeys?[WalkthroughTargets.factoryCollectButton],
             scale: 1.06,
             onTap: _onCollect,
             child: Container(
@@ -652,9 +833,14 @@ class _DogFactoryInsidePageState extends State<DogFactoryInsidePage> {
     final remainingSecs = hab.bakingRemainingSeconds;
     final progress = hab.bakingProgress;
     final diamondsNeeded = max(1, (remainingSecs / 900).ceil());
+    final screen = MediaQuery.of(context).size;
+    final compact = screen.width < 880 || screen.height < 560;
+    final pad = compact ? 14.0 : 26.0;
+    final gap = compact ? 10.0 : 18.0;
+    final artSize = compact ? 44.0 : 72.0;
 
     return Container(
-      padding: const EdgeInsets.all(26),
+      padding: EdgeInsets.all(pad),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           colors: [Color(0xFF3D1706), Color(0xFF200A02)],
@@ -678,7 +864,10 @@ class _DogFactoryInsidePageState extends State<DogFactoryInsidePage> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+                padding: EdgeInsets.symmetric(
+                  horizontal: compact ? 9 : 14,
+                  vertical: compact ? 3 : 5,
+                ),
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
                     colors: [Color(0xFFD97706), Color(0xFFB45309)],
@@ -686,19 +875,20 @@ class _DogFactoryInsidePageState extends State<DogFactoryInsidePage> {
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(color: const Color(0xFFFCD34D), width: 1.5),
                 ),
-                child: const Row(
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(Icons.local_fire_department_rounded,
-                        color: Color(0xFFFEF08A), size: 16),
-                    SizedBox(width: 4),
+                        color: const Color(0xFFFEF08A),
+                        size: compact ? 13 : 16),
+                    SizedBox(width: compact ? 3 : 4),
                     Text(
                       'BAKING IN OVEN',
                       style: TextStyle(
-                        color: Color(0xFFFEF08A),
+                        color: const Color(0xFFFEF08A),
                         fontFamily: 'Lilita One',
-                        fontSize: 13,
-                        letterSpacing: 0.6,
+                        fontSize: compact ? 11 : 13,
+                        letterSpacing: compact ? 0.2 : 0.6,
                       ),
                     ),
                   ],
@@ -708,24 +898,28 @@ class _DogFactoryInsidePageState extends State<DogFactoryInsidePage> {
                 scale: 1.05,
                 onTap: () => setState(() => _showRecipesWhileBaking = true),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: compact ? 8 : 12,
+                    vertical: compact ? 3 : 5,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0x40000000),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: const Color(0xFFFBBF24), width: 1.2),
                   ),
-                  child: const Row(
+                  child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(Icons.menu_book_rounded,
-                          color: Color(0xFFFBBF24), size: 14),
-                      SizedBox(width: 4),
+                          color: const Color(0xFFFBBF24),
+                          size: compact ? 12 : 14),
+                      SizedBox(width: compact ? 3 : 4),
                       Text(
                         'View 6 Recipes',
                         style: TextStyle(
-                          color: Color(0xFFFEF3C7),
+                          color: const Color(0xFFFEF3C7),
                           fontFamily: 'Fredoka',
-                          fontSize: 12,
+                          fontSize: compact ? 10 : 12,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -735,37 +929,40 @@ class _DogFactoryInsidePageState extends State<DogFactoryInsidePage> {
               ),
             ],
           ),
-          const SizedBox(height: 18),
+          SizedBox(height: gap),
           Image.asset(
             'assets/ui/dogfood.png',
-            width: 72,
-            height: 72,
+            width: artSize,
+            height: artSize,
             fit: BoxFit.contain,
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: compact ? 6 : 12),
           Text(
             hab.bakingRecipeName ?? 'Baking Kibble',
-            style: const TextStyle(
-              color: Color(0xFFFEF08A),
+            style: TextStyle(
+              color: const Color(0xFFFEF08A),
               fontFamily: 'Lilita One',
-              fontSize: 22,
+              fontSize: compact ? 16 : 22,
             ),
           ),
-          const SizedBox(height: 4),
+          SizedBox(height: compact ? 2 : 4),
           Text(
             'Yield: +${_fmt(hab.bakingFoodAmount ?? 0)} Kibble  |  +${hab.bakingXpReward ?? 0} XP',
-            style: const TextStyle(
-              color: Color(0xFFFCD34D),
+            style: TextStyle(
+              color: const Color(0xFFFCD34D),
               fontFamily: 'Fredoka',
-              fontSize: 13,
+              fontSize: compact ? 11 : 13,
               fontWeight: FontWeight.w600,
             ),
           ),
-          const SizedBox(height: 18),
+          SizedBox(height: gap),
 
           // Progress Bar & Timer Pill
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: EdgeInsets.symmetric(
+              horizontal: compact ? 12 : 16,
+              vertical: compact ? 8 : 12,
+            ),
             decoration: BoxDecoration(
               color: const Color(0x66000000),
               borderRadius: BorderRadius.circular(18),
@@ -778,15 +975,16 @@ class _DogFactoryInsidePageState extends State<DogFactoryInsidePage> {
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.timer_outlined,
-                            color: Color(0xFFFBBF24), size: 16),
-                        const SizedBox(width: 6),
+                        Icon(Icons.timer_outlined,
+                            color: const Color(0xFFFBBF24),
+                            size: compact ? 13 : 16),
+                        SizedBox(width: compact ? 4 : 6),
                         Text(
                           'Time Remaining: ${_formatDuration(remainingSecs)}',
-                          style: const TextStyle(
-                            color: Color(0xFFFEF3C7),
+                          style: TextStyle(
+                            color: const Color(0xFFFEF3C7),
                             fontFamily: 'Fredoka',
-                            fontSize: 13,
+                            fontSize: compact ? 11 : 13,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -794,19 +992,19 @@ class _DogFactoryInsidePageState extends State<DogFactoryInsidePage> {
                     ),
                     Text(
                       '${(progress * 100).toInt()}%',
-                      style: const TextStyle(
-                        color: Color(0xFFFEF08A),
+                      style: TextStyle(
+                        color: const Color(0xFFFEF08A),
                         fontFamily: 'Lilita One',
-                        fontSize: 14,
+                        fontSize: compact ? 12 : 14,
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
+                SizedBox(height: compact ? 5 : 8),
                 ClipRRect(
                   borderRadius: BorderRadius.circular(8),
                   child: Container(
-                    height: 14,
+                    height: compact ? 10 : 14,
                     color: const Color(0xFF1E0A02),
                     child: Stack(
                       children: [
@@ -830,14 +1028,18 @@ class _DogFactoryInsidePageState extends State<DogFactoryInsidePage> {
             ),
           ),
 
-          const SizedBox(height: 22),
+          SizedBox(height: compact ? 12 : 22),
 
           // Speed-Up Button
           HoverScale(
+            key: widget.walkthroughKeys?[WalkthroughTargets.factorySpeedUpButton],
             scale: 1.06,
             onTap: _onSpeedUp,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+              padding: EdgeInsets.symmetric(
+                horizontal: compact ? 14 : 24,
+                vertical: compact ? 7 : 10,
+              ),
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
                   colors: [Color(0xFF06B6D4), Color(0xFF0891B2)],
@@ -857,18 +1059,19 @@ class _DogFactoryInsidePageState extends State<DogFactoryInsidePage> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Image.asset('assets/ui/diamonds.png', width: 22, height: 22),
-                  const SizedBox(width: 8),
+                  Image.asset('assets/ui/diamonds.png',
+                      width: compact ? 17 : 22, height: compact ? 17 : 22),
+                  SizedBox(width: compact ? 5 : 8),
                   Text(
                     'FINISH INSTANTLY',
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: Colors.white,
                       fontFamily: 'Lilita One',
-                      fontSize: 14,
-                      letterSpacing: 0.5,
+                      fontSize: compact ? 11 : 14,
+                      letterSpacing: compact ? 0.2 : 0.5,
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  SizedBox(width: compact ? 5 : 8),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
@@ -879,14 +1082,16 @@ class _DogFactoryInsidePageState extends State<DogFactoryInsidePage> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Image.asset('assets/ui/diamonds.png', width: 14, height: 14),
-                        const SizedBox(width: 4),
+                        Image.asset('assets/ui/diamonds.png',
+                            width: compact ? 11 : 14,
+                            height: compact ? 11 : 14),
+                        SizedBox(width: compact ? 3 : 4),
                         Text(
                           '$diamondsNeeded',
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: Colors.white,
                             fontFamily: 'Lilita One',
-                            fontSize: 13,
+                            fontSize: compact ? 11 : 13,
                           ),
                         ),
                       ],
@@ -924,41 +1129,46 @@ class _DogFactoryInsidePageState extends State<DogFactoryInsidePage> {
               ),
             ],
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (isBaking) ...[
-                HoverScale(
-                  scale: 1.05,
-                  onTap: () => setState(() => _showRecipesWhileBaking = false),
-                  child: const Row(
-                    children: [
-                      Icon(Icons.arrow_back, color: Color(0xFFFCD34D), size: 16),
-                      SizedBox(width: 4),
-                      Text(
-                        'Oven Status',
-                        style: TextStyle(
-                          color: Color(0xFFFCD34D),
-                          fontFamily: 'Fredoka',
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (isBaking) ...[
+                  HoverScale(
+                    scale: 1.05,
+                    onTap: () => setState(() => _showRecipesWhileBaking = false),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.arrow_back,
+                            color: Color(0xFFFCD34D), size: 16),
+                        SizedBox(width: 4),
+                        Text(
+                          'Oven Status',
+                          style: TextStyle(
+                            color: Color(0xFFFCD34D),
+                            fontFamily: 'Fredoka',
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      ),
-                      SizedBox(width: 14),
-                    ],
+                        SizedBox(width: 14),
+                      ],
+                    ),
+                  ),
+                ],
+                const Text(
+                  'BAKE FOOD RECIPES (6 AVAILABLE)',
+                  style: TextStyle(
+                    color: Color(0xFFFEF08A),
+                    fontFamily: 'Lilita One',
+                    fontSize: 15,
+                    letterSpacing: 0.8,
                   ),
                 ),
               ],
-              const Text(
-                'BAKE FOOD RECIPES (6 AVAILABLE)',
-                style: TextStyle(
-                  color: Color(0xFFFEF08A),
-                  fontFamily: 'Lilita One',
-                  fontSize: 15,
-                  letterSpacing: 0.8,
-                ),
-              ),
-            ],
+            ),
           ),
         ),
         const SizedBox(height: 12),
@@ -967,23 +1177,43 @@ class _DogFactoryInsidePageState extends State<DogFactoryInsidePage> {
         Flexible(
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final isWide = constraints.maxWidth > 700;
-              final crossAxisCount = isWide ? 3 : 2;
+              final isShort = constraints.maxHeight < 340;
+              // Use three columns on short landscape windows too, so the six
+              // recipes need far less scrolling to browse.
+              final isWide = constraints.maxWidth > 750 ||
+                  (isShort && constraints.maxWidth > 540);
+              final isVeryNarrow = constraints.maxWidth < 450;
+              final crossAxisCount = isWide ? 3 : (isVeryNarrow ? 1 : 2);
+              final aspect = isWide
+                  ? (isShort ? 1.4 : 1.48)
+                  : (isVeryNarrow ? 2.4 : 1.15);
 
-              return GridView.builder(
-                shrinkWrap: true,
-                physics: const BouncingScrollPhysics(),
-                itemCount: FoodRecipeModel.recipes.length,
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: crossAxisCount,
-                  mainAxisSpacing: 10,
-                  crossAxisSpacing: 10,
-                  childAspectRatio: isWide ? 1.48 : 1.15,
-                ),
-                itemBuilder: (context, idx) {
-                  final recipe = FoodRecipeModel.recipes[idx];
-                  return _buildRecipeCard(recipe, hab, isBaking);
-                },
+              return Stack(
+                children: [
+                  Positioned.fill(
+                    child: Scrollbar(
+                      controller: _recipeScrollController,
+                      thumbVisibility: true,
+                      child: GridView.builder(
+                        controller: _recipeScrollController,
+                        physics: const BouncingScrollPhysics(),
+                        itemCount: FoodRecipeModel.recipes.length,
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: crossAxisCount,
+                          mainAxisSpacing: 10,
+                          crossAxisSpacing: 10,
+                          childAspectRatio: aspect,
+                        ),
+                        itemBuilder: (context, idx) {
+                          final recipe = FoodRecipeModel.recipes[idx];
+                          return _buildRecipeCard(recipe, hab, isBaking,
+                              isFirstRecipe: idx == 0);
+                        },
+                      ),
+                    ),
+                  ),
+                  if (!_recipesAtBottom) _buildRecipeScrollHint(),
+                ],
               );
             },
           ),
@@ -993,7 +1223,8 @@ class _DogFactoryInsidePageState extends State<DogFactoryInsidePage> {
   }
 
   Widget _buildRecipeCard(
-      FoodRecipeModel recipe, HabitatModel hab, bool isBaking) {
+      FoodRecipeModel recipe, HabitatModel hab, bool isBaking,
+      {bool isFirstRecipe = false}) {
     final canAfford = widget.game.coins >= recipe.costCoins;
     final isBakeBlocked = isBaking;
 
@@ -1123,46 +1354,60 @@ class _DogFactoryInsidePageState extends State<DogFactoryInsidePage> {
               borderRadius: BorderRadius.circular(8),
             ),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    Image.asset('assets/ui/dogfood.png', width: 16, height: 16),
-                    const SizedBox(width: 4),
-                    Text(
-                      '+${_fmt(recipe.foodAmount)} Kibble',
-                      style: const TextStyle(
-                        color: Color(0xFFFEF3C7),
-                        fontFamily: 'Lilita One',
-                        fontSize: 12,
+                Expanded(
+                  child: Row(
+                    children: [
+                      Image.asset('assets/ui/dogfood.png',
+                          width: 16, height: 16),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          '+${_fmt(recipe.foodAmount)} Kibble',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Color(0xFFFEF3C7),
+                            fontFamily: 'Lilita One',
+                            fontSize: 12,
+                          ),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-                Row(
-                  children: [
-                    Image.asset(
-                      'assets/ui/icon_star.png',
-                      width: 14,
-                      height: 14,
-                      fit: BoxFit.contain,
-                      errorBuilder: (ctx, err, st) => const Icon(
-                        Icons.star_rounded,
-                        color: Color(0xFF34D399),
-                        size: 14,
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      Image.asset(
+                        'assets/ui/icon_star.png',
+                        width: 14,
+                        height: 14,
+                        fit: BoxFit.contain,
+                        errorBuilder: (ctx, err, st) => const Icon(
+                          Icons.star_rounded,
+                          color: Color(0xFF34D399),
+                          size: 14,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 3),
-                    Text(
-                      '+${recipe.xpReward} XP',
-                      style: const TextStyle(
-                        color: Color(0xFF34D399),
-                        fontFamily: 'Fredoka',
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
+                      const SizedBox(width: 3),
+                      Flexible(
+                        child: Text(
+                          '+${recipe.xpReward} XP',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Color(0xFF34D399),
+                            fontFamily: 'Fredoka',
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -1170,6 +1415,9 @@ class _DogFactoryInsidePageState extends State<DogFactoryInsidePage> {
 
           // Bottom Action: Make Food / Bake Button with Cost
           HoverScale(
+            key: isFirstRecipe
+                ? (widget.walkthroughKeys?[WalkthroughTargets.factoryBakeButton])
+                : null,
             scale: canAfford && !isBakeBlocked ? 1.04 : 1.0,
             onTap: () {
               if (isBakeBlocked) {
@@ -1205,36 +1453,39 @@ class _DogFactoryInsidePageState extends State<DogFactoryInsidePage> {
                   ),
                 ],
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Image.asset('assets/ui/coins.png', width: 16, height: 16),
-                  const SizedBox(width: 4),
-                  Text(
-                    _fmt(recipe.costCoins),
-                    style: TextStyle(
-                      color: canAfford && !isBakeBlocked
-                          ? const Color(0xFF3B1404)
-                          : Colors.white,
-                      fontFamily: 'Lilita One',
-                      fontSize: 12,
-                      fontWeight: FontWeight.w900,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Image.asset('assets/ui/coins.png', width: 16, height: 16),
+                    const SizedBox(width: 4),
+                    Text(
+                      _fmt(recipe.costCoins),
+                      style: TextStyle(
+                        color: canAfford && !isBakeBlocked
+                            ? const Color(0xFF3B1404)
+                            : Colors.white,
+                        fontFamily: 'Lilita One',
+                        fontSize: 12,
+                        fontWeight: FontWeight.w900,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    isBakeBlocked ? 'OVEN BUSY' : 'MAKE FOOD',
-                    style: TextStyle(
-                      color: canAfford && !isBakeBlocked
-                          ? const Color(0xFF3B1404)
-                          : Colors.white70,
-                      fontFamily: 'Lilita One',
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 0.4,
+                    const SizedBox(width: 6),
+                    Text(
+                      isBakeBlocked ? 'OVEN BUSY' : 'MAKE FOOD',
+                      style: TextStyle(
+                        color: canAfford && !isBakeBlocked
+                            ? const Color(0xFF3B1404)
+                            : Colors.white70,
+                        fontFamily: 'Lilita One',
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0.4,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
