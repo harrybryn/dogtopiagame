@@ -6,12 +6,12 @@
 class SupabaseConfig {
   static const String supabaseUrl = String.fromEnvironment(
     'SUPABASE_URL',
-    defaultValue: 'https://ipvbuktfrohnhnohlrjo.supabase.co',
+    defaultValue: '',
   );
 
   static const String supabaseAnonKey = String.fromEnvironment(
     'SUPABASE_ANON_KEY',
-    defaultValue: 'sb_publishable_0yGAVfWlQI9rzWZIdZ-SOw_byrbi__F',
+    defaultValue: '',
   );
 
   static const String mobileRedirectUrl =
