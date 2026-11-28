@@ -164,6 +164,18 @@ class _DogtopiaRootState extends State<DogtopiaRoot>
           showExistingGoogleAccountDialog(context, _game, pending);
         }
       });
+    } else if (status == CloudSyncStatus.noCloudAccountFound && mounted) {
+      final email =
+          CloudSaveService.instance.userEmail ?? 'This Google account';
+      final wasSwitch = CloudSaveService.instance.lastSyncWasSwitch;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (wasSwitch) {
+          showNoCloudAccountDialog(context, email);
+        } else {
+          showBindEmptyGoogleAccountDialog(context, _game, email);
+        }
+      });
     }
   }
 
@@ -419,6 +431,19 @@ class _DogtopiaRootState extends State<DogtopiaRoot>
                       if (status == CloudSyncStatus.loadedFromCloud) {
                         await LocalSaveService.instance.saveNow(_game);
                         return null;
+                      }
+                      if (status == CloudSyncStatus.noCloudAccountFound) {
+                        if (!mounted) return null;
+                        final email = CloudSaveService.instance.userEmail ??
+                            'This Google account';
+                        final bound = await showBindEmptyGoogleAccountDialog(
+                          context,
+                          _game,
+                          email,
+                        );
+                        return bound
+                            ? 'Google account connected! Enter a username to start & save.'
+                            : 'Cancelled. Not connected to Google.';
                       }
                       if (status == CloudSyncStatus.failed) {
                         return CloudSaveService.instance.lastError ??

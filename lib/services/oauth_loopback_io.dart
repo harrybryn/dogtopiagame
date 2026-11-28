@@ -26,7 +26,10 @@ Future<HttpServer> _bindLoopbackServer() async {
   return HttpServer.bind(InternetAddress.loopbackIPv4, 0);
 }
 
-Future<bool> signInWithDesktopLoopback(SupabaseClient client) async {
+Future<bool> signInWithDesktopLoopback(
+  SupabaseClient client, {
+  bool selectAccount = false,
+}) async {
   if (!isDesktopPlatform) return false;
   HttpServer? server;
   try {
@@ -73,6 +76,7 @@ Future<bool> signInWithDesktopLoopback(SupabaseClient client) async {
     final launched = await client.auth.signInWithOAuth(
       OAuthProvider.google,
       redirectTo: redirectUrl,
+      queryParams: selectAccount ? const {'prompt': 'select_account'} : null,
     );
     if (!launched) {
       await sub.cancel();

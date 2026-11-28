@@ -144,3 +144,165 @@ Future<bool> showExistingGoogleAccountDialog(
     return false;
   }
 }
+
+/// Prompts the user when they sign in via "Already have an account?" using a
+/// Google account that has no saved cloud progress yet, asking whether to
+/// bind/connect the current game to that account.
+Future<bool> showBindEmptyGoogleAccountDialog(
+  BuildContext context,
+  GameController game,
+  String email,
+) async {
+  final result = await showDialog<bool>(
+    context: context,
+    barrierDismissible: false,
+    builder: (ctx) => AlertDialog(
+      backgroundColor: const Color(0xFF2A1205),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(22),
+        side: const BorderSide(color: Color(0xFFFBBF24), width: 2.2),
+      ),
+      title: const Row(
+        children: [
+          Icon(Icons.cloud_off_rounded, color: Color(0xFFFDE047), size: 25),
+          SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'NO SAVED PROGRESS FOUND',
+              style: TextStyle(
+                color: Color(0xFFFEF08A),
+                fontFamily: 'Lilita One',
+                fontSize: 16.5,
+              ),
+            ),
+          ),
+        ],
+      ),
+      content: Text(
+        '$email does not have any saved Dogtopia progress in the cloud yet.\n\nDo you want to bind/connect your current game to this Google account?',
+        style: const TextStyle(
+          color: Color(0xFFFEF3C7),
+          fontFamily: 'Fredoka',
+          fontWeight: FontWeight.w600,
+          fontSize: 13.5,
+          height: 1.4,
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () {
+            SoundManager.instance.playClick();
+            Navigator.pop(ctx, false);
+          },
+          child: const Text(
+            'CANCEL',
+            style: TextStyle(
+              color: Colors.white70,
+              fontFamily: 'Lilita One',
+            ),
+          ),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            SoundManager.instance.playClick();
+            Navigator.pop(ctx, true);
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF10B981),
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+          child: const Text(
+            'YES, CONNECT',
+            style: TextStyle(
+              fontFamily: 'Lilita One',
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  if (result == true) {
+    if (game.hasUsername) {
+      await CloudSaveService.instance.saveNow(game);
+    }
+    return true;
+  } else {
+    await CloudSaveService.instance.discardUnlinkedAuthUser();
+    return false;
+  }
+}
+
+/// Notifies the user when they switch to a Google account that has no saved
+/// cloud progress yet, and removes the unlinked auth user record.
+Future<void> showNoCloudAccountDialog(
+  BuildContext context,
+  String email,
+) async {
+  await CloudSaveService.instance.discardUnlinkedAuthUser();
+  if (!context.mounted) return;
+  await showDialog<void>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      backgroundColor: const Color(0xFF2A1205),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(22),
+        side: const BorderSide(color: Color(0xFFFBBF24), width: 2.2),
+      ),
+      title: const Row(
+        children: [
+          Icon(Icons.cloud_off_rounded, color: Color(0xFFFCA5A5), size: 24),
+          SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'NO CLOUD ACCOUNT FOUND',
+              style: TextStyle(
+                color: Color(0xFFFEF08A),
+                fontFamily: 'Lilita One',
+                fontSize: 17,
+              ),
+            ),
+          ),
+        ],
+      ),
+      content: Text(
+        '$email does not have an existing Dogtopia account saved in the cloud yet.\n\nTry switching to a Google account that already has a saved island.',
+        style: const TextStyle(
+          color: Color(0xFFFEF3C7),
+          fontFamily: 'Fredoka',
+          fontWeight: FontWeight.w600,
+          fontSize: 13.5,
+          height: 1.4,
+        ),
+      ),
+      actionsAlignment: MainAxisAlignment.center,
+      actions: [
+        ElevatedButton(
+          onPressed: () {
+            SoundManager.instance.playClick();
+            Navigator.pop(ctx);
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFFF59E0B),
+            foregroundColor: const Color(0xFF3B1404),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+          ),
+          child: const Text(
+            'GOT IT',
+            style: TextStyle(
+              fontFamily: 'Lilita One',
+              fontWeight: FontWeight.w900,
+              fontSize: 14,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}

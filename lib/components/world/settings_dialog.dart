@@ -43,28 +43,61 @@ class _SettingsDialogState extends State<SettingsDialog> {
   Future<void> _handleGoogleLoginExisting() =>
       _startGoogleAuth(preferCloud: true);
 
-  Future<void> _startGoogleAuth({required bool preferCloud}) async {
+  Future<void> _startGoogleAuth({
+    required bool preferCloud,
+    bool selectAccount = false,
+  }) async {
     SoundManager.instance.playClick();
     if (!SupabaseConfig.isConfigured || !CloudSaveService.instance.isAvailable) {
       _showSupabaseSetupDialog();
       return;
     }
+    final previousUserId = CloudSaveService.instance.currentUser?.id;
     setState(() {
       _isCloudBusy = true;
-      _cloudStatusNote = preferCloud
-          ? 'Opening Google account login...'
-          : 'Opening Google sign-in...';
+      _cloudStatusNote = selectAccount
+          ? 'Opening Google account switcher...'
+          : (preferCloud
+              ? 'Opening Google account login...'
+              : 'Opening Google sign-in...');
     });
     final ok = await CloudSaveService.instance.signInWithGoogle(
       preferCloud: preferCloud,
+      selectAccount: selectAccount,
+      switchAccount: selectAccount,
     );
     if (!mounted) return;
     if (ok && CloudSaveService.instance.isSignedIn) {
       final status = await CloudSaveService.instance.syncOnLogin(
         widget.game,
         preferCloud: preferCloud,
+        switchAccount: selectAccount,
       );
       if (!mounted) return;
+      if (status == CloudSyncStatus.noCloudAccountFound) {
+        final email = CloudSaveService.instance.userEmail ?? 'This Google account';
+        if (selectAccount) {
+          setState(() {
+            _isCloudBusy = false;
+            _cloudStatusNote = 'No saved cloud account found for $email.';
+          });
+          showNoCloudAccountDialog(context, email);
+        } else {
+          final bound = await showBindEmptyGoogleAccountDialog(
+            context,
+            widget.game,
+            email,
+          );
+          if (!mounted) return;
+          setState(() {
+            _isCloudBusy = false;
+            _cloudStatusNote = bound
+                ? 'Connected & saved your current game to $email!'
+                : 'Cancelled. Not connected to Google.';
+          });
+        }
+        return;
+      }
       if (status == CloudSyncStatus.accountAlreadyExists &&
           CloudSaveService.instance.pendingExistingAccount != null) {
         final loggedIn = await showExistingGoogleAccountDialog(
@@ -85,10 +118,14 @@ class _SettingsDialogState extends State<SettingsDialog> {
         _isCloudBusy = false;
         switch (status) {
           case CloudSyncStatus.loadedFromCloud:
-            _cloudStatusNote = 'Signed in & restored cloud island!';
+            _cloudStatusNote = selectAccount
+                ? 'Switched account & restored cloud island!'
+                : 'Signed in & restored cloud island!';
             break;
           case CloudSyncStatus.uploadedLocal:
-            _cloudStatusNote = 'Signed in & saved island to cloud!';
+            _cloudStatusNote = selectAccount
+                ? 'Switched account & saved island to cloud!'
+                : 'Signed in & saved island to cloud!';
             break;
           case CloudSyncStatus.upToDate:
             _cloudStatusNote = widget.game.hasUsername
@@ -104,50 +141,141 @@ class _SettingsDialogState extends State<SettingsDialog> {
     } else {
       setState(() {
         _isCloudBusy = false;
-        _cloudStatusNote = ok
-            ? 'Finish sign-in in the browser, then tap Sync.'
-            : 'Google sign-in was cancelled or failed.';
+        if (previousUserId != null && CloudSaveService.instance.isSignedIn) {
+          _cloudStatusNote =
+              'Account switch was cancelled. Still signed in.';
+        } else {
+          _cloudStatusNote = ok
+              ? 'Finish sign-in in the browser to complete.'
+              : 'Google sign-in was cancelled or failed.';
+        }
       });
     }
   }
 
-  Future<void> _handleCloudSyncNow() async {
+  Future<void> _showSwitchAccountDialog() async {
     SoundManager.instance.playClick();
-    setState(() {
-      _isCloudBusy = true;
-      _cloudStatusNote = 'Syncing with Supabase...';
-    });
-    final status = await CloudSaveService.instance.syncOnLogin(widget.game);
-    if (!mounted) return;
-    setState(() {
-      _isCloudBusy = false;
-      switch (status) {
-        case CloudSyncStatus.uploadedLocal:
-          _cloudStatusNote = 'Uploaded island to cloud!';
-          break;
-        case CloudSyncStatus.loadedFromCloud:
-          _cloudStatusNote = 'Restored newer island from cloud!';
-          break;
-        case CloudSyncStatus.upToDate:
-          _cloudStatusNote = 'Cloud save is up to date!';
-          break;
-        default:
-          _cloudStatusNote =
-              CloudSaveService.instance.lastError ??
-              'Sync failed. Check connection/RLS.';
-      }
-    });
-  }
+    final currentEmail =
+        CloudSaveService.instance.userEmail ?? 'Google Account';
+    final shouldSwitch = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF2A1205),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(22),
+          side: const BorderSide(color: Color(0xFFFBBF24), width: 2.2),
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.swap_horiz_rounded,
+                color: Color(0xFFFEF08A), size: 24),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'SWITCH ACCOUNT',
+                style: TextStyle(
+                  color: Color(0xFFFEF08A),
+                  fontFamily: 'Lilita One',
+                  fontSize: 18,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Switching accounts will log out your current account ($currentEmail) once the new sign-in succeeds.',
+              style: const TextStyle(
+                color: Color(0xFFFEF3C7),
+                fontFamily: 'Fredoka',
+                fontWeight: FontWeight.w600,
+                fontSize: 13.5,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'If you cancel or the switch fails, you will remain logged in to your current account.',
+              style: TextStyle(
+                color: Color(0xCC67E8F9),
+                fontFamily: 'Fredoka',
+                fontWeight: FontWeight.w600,
+                fontSize: 12.5,
+                height: 1.35,
+              ),
+            ),
+            const SizedBox(height: 16),
+            HoverScale(
+              scale: 1.025,
+              onTap: () {
+                SoundManager.instance.playClick();
+                Navigator.pop(ctx, true);
+              },
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  border:
+                      Border.all(color: const Color(0xFFE5E7EB), width: 1.5),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x55000000),
+                      blurRadius: 8,
+                      offset: Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CustomPaint(painter: GoogleLogoPainter()),
+                    ),
+                    const SizedBox(width: 10),
+                    const Text(
+                      'Continue with Google',
+                      style: TextStyle(
+                        color: Color(0xFF1F2937),
+                        fontFamily: 'Fredoka',
+                        fontWeight: FontWeight.w800,
+                        fontSize: 14.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+        actionsAlignment: MainAxisAlignment.center,
+        actions: [
+          TextButton(
+            onPressed: () {
+              SoundManager.instance.playClick();
+              Navigator.pop(ctx, false);
+            },
+            child: const Text(
+              'CANCEL',
+              style: TextStyle(
+                color: Colors.white70,
+                fontFamily: 'Lilita One',
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
 
-  Future<void> _handleGoogleSignOut() async {
-    SoundManager.instance.playClick();
-    setState(() => _isCloudBusy = true);
-    await CloudSaveService.instance.signOut();
-    if (!mounted) return;
-    setState(() {
-      _isCloudBusy = false;
-      _cloudStatusNote = 'Signed out of Google.';
-    });
+    if (shouldSwitch == true && mounted) {
+      await _startGoogleAuth(preferCloud: true, selectAccount: true);
+    }
   }
 
   void _openEditUsernameDialog() {
@@ -806,64 +934,53 @@ class _SettingsDialogState extends State<SettingsDialog> {
                 const SizedBox(height: 10),
 
                 if (CloudSaveService.instance.isSignedIn)
-                  Row(
-                    children: [
-                      Expanded(
-                        child: HoverScale(
-                          scale: 1.03,
-                          onTap: _isCloudBusy ? null : _handleCloudSyncNow,
-                          child: Container(
-                            alignment: Alignment.center,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 9),
-                            decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                colors: [Color(0xFF10B981), Color(0xFF059669)],
-                              ),
-                              borderRadius: BorderRadius.circular(12),
-                              border:
-                                  Border.all(color: Colors.white, width: 1.2),
-                            ),
-                            child: Text(
-                              _isCloudBusy ? 'SYNCING...' : 'SYNC NOW',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontFamily: 'Lilita One',
-                                fontSize: 12,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                          ),
+                  HoverScale(
+                    scale: 1.02,
+                    onTap: _isCloudBusy ? null : _showSwitchAccountDialog,
+                    child: Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: compact ? 8 : 12,
+                        vertical: compact ? 7 : 9,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0x33FBBF24),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: const Color(0x88FBBF24),
+                          width: 1.2,
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      HoverScale(
-                        scale: 1.03,
-                        onTap: _isCloudBusy ? null : _handleGoogleSignOut,
-                        child: Container(
-                          alignment: Alignment.center,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 9),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF5C280B),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                                color: const Color(0xFFFBBF24), width: 1.2),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.swap_horiz_rounded,
+                            color: const Color(0xFFFEF08A),
+                            size: compact ? 15 : 17,
                           ),
-                          child: const Text(
-                            'SIGN OUT',
-                            style: TextStyle(
-                              color: Color(0xFFFEF08A),
-                              fontFamily: 'Lilita One',
-                              fontSize: 12,
-                              letterSpacing: 0.5,
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                _isCloudBusy
+                                    ? 'Switching Account...'
+                                    : 'Switch Account',
+                                maxLines: 1,
+                                style: const TextStyle(
+                                  color: Color(0xFFFEF08A),
+                                  fontFamily: 'Fredoka',
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 12.5,
+                                ),
+                              ),
                             ),
                           ),
-                        ),
+                        ],
                       ),
-                    ],
+                    ),
                   )
-                else
+                else ...[
                   // Tactile Elevated Google Sign-In Button
                   HoverScale(
                     scale: 1.025,
@@ -978,6 +1095,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
                       ),
                     ),
                   ),
+                ],
               ],
             ),
           ),

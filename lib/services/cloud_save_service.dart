@@ -15,6 +15,7 @@ enum CloudSyncStatus {
   loadedFromCloud,
   upToDate,
   accountAlreadyExists,
+  noCloudAccountFound,
   failed,
 }
 
@@ -44,12 +45,14 @@ class CloudSaveService {
 
   bool _initialized = false;
   bool _isSyncing = false;
+  bool _lastSyncWasSwitch = false;
   String? _lastError;
   ExistingCloudAccount? _pendingExistingAccount;
   Timer? _debounceTimer;
 
   bool get isAvailable => _initialized;
   bool get isSyncing => _isSyncing;
+  bool get lastSyncWasSwitch => _lastSyncWasSwitch;
   String? get lastError => _lastError;
   ExistingCloudAccount? get pendingExistingAccount => _pendingExistingAccount;
 
@@ -85,33 +88,48 @@ class CloudSaveService {
   /// On Desktop (Windows/macOS/Linux), spins up a temporary loopback HTTP
   /// server (`http://localhost:<port>`) so Supabase's `?code=...` redirect
   /// completes the session without needing OS custom-scheme registration.
-  Future<bool> signInWithGoogle({bool preferCloud = false}) async {
+  Future<bool> signInWithGoogle({
+    bool preferCloud = false,
+    bool selectAccount = false,
+    bool switchAccount = false,
+  }) async {
     if (!_initialized) return false;
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_connectModeKey, preferCloud ? 'login' : 'connect');
-      if (preferCloud) {
+      await prefs.setString(
+        _connectModeKey,
+        switchAccount ? 'switch' : (preferCloud ? 'login' : 'connect'),
+      );
+      if (preferCloud || switchAccount) {
         await prefs.setBool(_preferCloudOnLoginKey, true);
       } else {
         await prefs.remove(_preferCloudOnLoginKey);
       }
 
+      final queryParams =
+          selectAccount ? const {'prompt': 'select_account'} : null;
+
       if (kIsWeb) {
         return await _client.auth.signInWithOAuth(
           OAuthProvider.google,
           redirectTo: Uri.base.origin,
+          queryParams: queryParams,
         );
       }
 
       if (defaultTargetPlatform == TargetPlatform.windows ||
           defaultTargetPlatform == TargetPlatform.macOS ||
           defaultTargetPlatform == TargetPlatform.linux) {
-        return await signInWithDesktopLoopback(_client);
+        return await signInWithDesktopLoopback(
+          _client,
+          selectAccount: selectAccount,
+        );
       }
 
       return await _client.auth.signInWithOAuth(
         OAuthProvider.google,
         redirectTo: SupabaseConfig.mobileRedirectUrl,
+        queryParams: queryParams,
       );
     } catch (e) {
       debugPrint('CloudSaveService.signInWithGoogle error: $e');
@@ -127,6 +145,21 @@ class CloudSaveService {
     } catch (e) {
       debugPrint('CloudSaveService.signOut error: $e');
     }
+  }
+
+  /// Deletes the current `auth.users` record if it has no row in `player_saves`
+  /// (via the `delete_unlinked_auth_user` Supabase RPC) and signs out.
+  Future<void> discardUnlinkedAuthUser() async {
+    _debounceTimer?.cancel();
+    if (!_initialized) return;
+    try {
+      if (currentUser != null) {
+        await _client.rpc('delete_unlinked_auth_user');
+      }
+    } catch (e) {
+      debugPrint('CloudSaveService.discardUnlinkedAuthUser rpc error: $e');
+    }
+    await signOut();
   }
 
   /// Debounced cloud auto-save called on game state updates.
@@ -223,6 +256,7 @@ class CloudSaveService {
   Future<CloudSyncStatus> syncOnLogin(
     GameController game, {
     bool preferCloud = false,
+    bool switchAccount = false,
   }) async {
     if (!_initialized) return CloudSyncStatus.notConfigured;
     final user = currentUser;
@@ -234,11 +268,15 @@ class CloudSaveService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final connectMode = prefs.getString(_connectModeKey);
-      final shouldPreferCloud =
-          preferCloud ||
-          connectMode == 'login' ||
-          (prefs.getBool(_preferCloudOnLoginKey) ?? false);
-      final isConnectFlow = !preferCloud && connectMode == 'connect';
+      final isSwitchFlow = switchAccount || connectMode == 'switch';
+      _lastSyncWasSwitch = isSwitchFlow;
+      final isLoginFlow = !isSwitchFlow &&
+          (preferCloud ||
+              connectMode == 'login' ||
+              (prefs.getBool(_preferCloudOnLoginKey) ?? false));
+      final shouldPreferCloud = preferCloud || isSwitchFlow || isLoginFlow;
+      final isConnectFlow =
+          !preferCloud && !isSwitchFlow && connectMode == 'connect';
       await prefs.remove(_connectModeKey);
       await prefs.remove(_preferCloudOnLoginKey);
 
@@ -250,6 +288,9 @@ class CloudSaveService {
 
       if (row == null || row['save_data'] == null) {
         _isSyncing = false;
+        if (isSwitchFlow || isLoginFlow) {
+          return CloudSyncStatus.noCloudAccountFound;
+        }
         if (game.hasUsername) {
           final uploaded = await saveNow(game);
           return uploaded
